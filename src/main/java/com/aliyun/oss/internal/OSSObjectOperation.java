@@ -60,6 +60,7 @@ import static com.aliyun.oss.internal.ResponseParsers.putObjectReponseParser;
 import static com.aliyun.oss.internal.ResponseParsers.putObjectProcessReponseParser;
 import static com.aliyun.oss.internal.ResponseParsers.getSimplifiedObjectMetaResponseParser;
 import static com.aliyun.oss.internal.ResponseParsers.getSymbolicLinkResponseParser;
+import static com.aliyun.oss.internal.ResponseParsers.headObjectResponseParser;
 
 import java.io.BufferedOutputStream;
 import java.io.ByteArrayInputStream;
@@ -448,7 +449,7 @@ public class OSSObjectOperation extends OSSOperation {
     /**
      * Check if the object key exists under the specified bucket.
      */
-    public void headObject(HeadObjectRequest headObjectRequest) throws OSSException, ClientException {
+    public ObjectMetadata headObject(HeadObjectRequest headObjectRequest) throws OSSException, ClientException {
 
         assertParameterNotNull(headObjectRequest, "headObjectRequest");
 
@@ -474,7 +475,7 @@ public class OSSObjectOperation extends OSSOperation {
                 .setMethod(HttpMethod.HEAD).setBucket(bucketName).setKey(key).setHeaders(headers)
                 .setOriginalRequest(headObjectRequest).build();
 
-        doOperation(request, emptyResponseParser, bucketName, key);
+        return doOperation(request, headObjectResponseParser, bucketName, key);
     }
 
     public void setObjectAcl(SetObjectAclRequest setObjectAclRequest) throws OSSException, ClientException {
