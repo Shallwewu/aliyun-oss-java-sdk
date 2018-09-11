@@ -21,6 +21,7 @@ package com.aliyun.oss.common.comm;
 
 import java.io.IOException;
 
+import okhttp3.Response;
 import org.apache.http.client.methods.CloseableHttpResponse;
 
 import com.aliyun.oss.internal.OSSHeaders;
@@ -35,9 +36,11 @@ public class ResponseMessage extends HttpMesssage {
     private ServiceClient.Request request;
     private CloseableHttpResponse httpResponse;
 
-    // For convenience of logging invalid response
-    private String errorResponseAsString;
+    private Response okhttpResponse;
 
+    // For convenience of logging invalid response
+
+    private String errorResponseAsString;
     public ResponseMessage(ServiceClient.Request request) {
         this.request = request;
     }
@@ -82,6 +85,10 @@ public class ResponseMessage extends HttpMesssage {
         if (httpResponse != null) {
             httpResponse.close();
         }
+
+        if (okhttpResponse != null) {
+            okhttpResponse.close();
+        }
     }
 
     public CloseableHttpResponse getHttpResponse() {
@@ -90,5 +97,13 @@ public class ResponseMessage extends HttpMesssage {
 
     public void setHttpResponse(CloseableHttpResponse httpResponse) {
         this.httpResponse = httpResponse;
+    }
+
+    public Response getResponse() {
+        return okhttpResponse;
+    }
+
+    public void setResponse(Response response) {
+        this.okhttpResponse = response;
     }
 }

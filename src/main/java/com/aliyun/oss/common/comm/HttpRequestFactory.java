@@ -21,6 +21,9 @@ package com.aliyun.oss.common.comm;
 
 import java.util.Map.Entry;
 
+import okhttp3.Headers;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
 import org.apache.http.HttpEntity;
 import org.apache.http.client.methods.HttpDelete;
 import org.apache.http.client.methods.HttpGet;
@@ -80,8 +83,61 @@ class HttpRequestFactory {
         return httpRequest;
     }
 
+    public Request.Builder createHttpRequestBuilder(ServiceClient.Request request, ExecutionContext context) {
+        Request.Builder builder = new Request.Builder();
+        String uri = request.getUri();
+
+        HttpMethod method = request.getMethod();
+        if (method == HttpMethod.POST) {
+            InputStreamRequestBody requestBody = null;
+
+            if (request.getContent() != null) {
+                requestBody = new InputStreamRequestBody(request);
+            }
+            builder.post(requestBody);
+        } else if (method == HttpMethod.PUT) {
+            InputStreamRequestBody requestBody = null;
+
+            if (request.getContent() != null) {
+                if (request.isUseChunkEncoding()) {
+                    builder.header(HttpHeaders.TRANSFER_ENCODING, "chunked");
+                }
+                requestBody = new InputStreamRequestBody(request);
+            }
+            builder.put(requestBody);
+        } else if (method == HttpMethod.GET) {
+            builder.get();
+        } else if (method == HttpMethod.DELETE) {
+            builder.delete();
+        } else if (method == HttpMethod.HEAD) {
+            builder.head();
+        } else if (method == HttpMethod.OPTIONS) {
+            builder.method("OPTIONS", null);
+        } else {
+            throw new ClientException("Unknown HTTP method name: " + method.toString());
+        }
+
+        builder.url(uri);
+        configureRequestHeaders(request, context, builder);
+
+        return builder;
+    }
+
     private HttpEntity buildChunkedInputStreamEntity(ServiceClient.Request request) {
         return new ChunkedInputStreamEntity(request);
+    }
+
+    private void configureRequestHeaders(ServiceClient.Request request, ExecutionContext context,
+                                         Request.Builder builder) {
+
+        for (Entry<String, String> entry : request.getHeaders().entrySet()) {
+            if (entry.getKey().equalsIgnoreCase(HttpHeaders.CONTENT_LENGTH)
+                    || entry.getKey().equalsIgnoreCase(HttpHeaders.HOST)) {
+                continue;
+            }
+
+            builder.addHeader(entry.getKey(), entry.getValue());
+        }
     }
 
     private void configureRequestHeaders(ServiceClient.Request request, ExecutionContext context,
