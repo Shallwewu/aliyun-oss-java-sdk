@@ -129,6 +129,6 @@ public class TimeoutServiceClient extends DefaultServiceClient {
         public CloseableHttpResponse call() throws Exception {
             return httpClient.execute(httpRequest, httpContext);
         }
-    };
+    }
 
 }
