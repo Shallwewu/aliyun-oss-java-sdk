@@ -21,88 +21,54 @@ package com.aliyun.oss.common.comm;
 
 import java.util.Map.Entry;
 
-import okhttp3.Headers;
-import okhttp3.OkHttpClient;
+import okhttp3.MediaType;
 import okhttp3.Request;
-import org.apache.http.HttpEntity;
-import org.apache.http.client.methods.HttpDelete;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.client.methods.HttpHead;
-import org.apache.http.client.methods.HttpOptions;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.client.methods.HttpPut;
-import org.apache.http.client.methods.HttpRequestBase;
 
 import com.aliyun.oss.ClientException;
 import com.aliyun.oss.HttpMethod;
-import com.aliyun.oss.common.comm.io.ChunkedInputStreamEntity;
 import com.aliyun.oss.common.utils.HttpHeaders;
+import okhttp3.RequestBody;
+import okio.BufferedSink;
 
 class HttpRequestFactory {
 
-    public HttpRequestBase createHttpRequest(ServiceClient.Request request, ExecutionContext context) {
+    public Request createHttpRequest(ServiceClient.Request request, ExecutionContext context) {
+        Request.Builder builder = createHttpRequestBuilder(request, context);
 
-        String uri = request.getUri();
-
-        HttpRequestBase httpRequest;
-        HttpMethod method = request.getMethod();
-        if (method == HttpMethod.POST) {
-            HttpPost postMethod = new HttpPost(uri);
-
-            if (request.getContent() != null) {
-                postMethod.setEntity(new RepeatableInputStreamEntity(request));
-            }
-
-            httpRequest = postMethod;
-        } else if (method == HttpMethod.PUT) {
-            HttpPut putMethod = new HttpPut(uri);
-
-            if (request.getContent() != null) {
-                if (request.isUseChunkEncoding()) {
-                    putMethod.setEntity(buildChunkedInputStreamEntity(request));
-                } else {
-                    putMethod.setEntity(new RepeatableInputStreamEntity(request));
-                }
-            }
-
-            httpRequest = putMethod;
-        } else if (method == HttpMethod.GET) {
-            httpRequest = new HttpGet(uri);
-        } else if (method == HttpMethod.DELETE) {
-            httpRequest = new HttpDelete(uri);
-        } else if (method == HttpMethod.HEAD) {
-            httpRequest = new HttpHead(uri);
-        } else if (method == HttpMethod.OPTIONS) {
-            httpRequest = new HttpOptions(uri);
-        } else {
-            throw new ClientException("Unknown HTTP method name: " + method.toString());
-        }
-
-        configureRequestHeaders(request, context, httpRequest);
-
-        return httpRequest;
+        return builder.build();
     }
 
-    public Request.Builder createHttpRequestBuilder(ServiceClient.Request request, ExecutionContext context) {
+    private Request.Builder createHttpRequestBuilder(ServiceClient.Request request, ExecutionContext context) {
         Request.Builder builder = new Request.Builder();
         String uri = request.getUri();
 
         HttpMethod method = request.getMethod();
         if (method == HttpMethod.POST) {
-            InputStreamRequestBody requestBody = null;
+            RepeatableInputStreamEntity requestBody = null;
 
             if (request.getContent() != null) {
-                requestBody = new InputStreamRequestBody(request);
+                requestBody = new RepeatableInputStreamEntity(request);
             }
             builder.post(requestBody);
         } else if (method == HttpMethod.PUT) {
-            InputStreamRequestBody requestBody = null;
+            RequestBody requestBody;
 
             if (request.getContent() != null) {
                 if (request.isUseChunkEncoding()) {
                     builder.header(HttpHeaders.TRANSFER_ENCODING, "chunked");
                 }
-                requestBody = new InputStreamRequestBody(request);
+                requestBody = new RepeatableInputStreamEntity(request);
+            } else {
+                requestBody = new RequestBody() {
+                    @Override
+                    public MediaType contentType() {
+                        return null;
+                    }
+
+                    @Override
+                    public void writeTo(BufferedSink sink) {
+                    }
+                };
             }
             builder.put(requestBody);
         } else if (method == HttpMethod.GET) {
@@ -123,10 +89,6 @@ class HttpRequestFactory {
         return builder;
     }
 
-    private HttpEntity buildChunkedInputStreamEntity(ServiceClient.Request request) {
-        return new ChunkedInputStreamEntity(request);
-    }
-
     private void configureRequestHeaders(ServiceClient.Request request, ExecutionContext context,
                                          Request.Builder builder) {
 
@@ -140,16 +102,4 @@ class HttpRequestFactory {
         }
     }
 
-    private void configureRequestHeaders(ServiceClient.Request request, ExecutionContext context,
-            HttpRequestBase httpRequest) {
-
-        for (Entry<String, String> entry : request.getHeaders().entrySet()) {
-            if (entry.getKey().equalsIgnoreCase(HttpHeaders.CONTENT_LENGTH)
-                    || entry.getKey().equalsIgnoreCase(HttpHeaders.HOST)) {
-                continue;
-            }
-
-            httpRequest.addHeader(entry.getKey(), entry.getValue());
-        }
-    }
 }

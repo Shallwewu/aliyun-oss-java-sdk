@@ -22,11 +22,10 @@ package com.aliyun.oss.common.comm;
 import java.io.IOException;
 
 import okhttp3.Response;
-import org.apache.http.client.methods.CloseableHttpResponse;
 
 import com.aliyun.oss.internal.OSSHeaders;
 
-public class ResponseMessage extends HttpMesssage {
+public class ResponseMessage extends HttpMessage {
 
     private static final int HTTP_SUCCESS_STATUS_CODE = 200;
 
@@ -34,7 +33,6 @@ public class ResponseMessage extends HttpMesssage {
     private int statusCode;
 
     private ServiceClient.Request request;
-    private CloseableHttpResponse httpResponse;
 
     private Response okhttpResponse;
 
@@ -82,21 +80,9 @@ public class ResponseMessage extends HttpMesssage {
     }
 
     public void abort() throws IOException {
-        if (httpResponse != null) {
-            httpResponse.close();
-        }
-
         if (okhttpResponse != null) {
             okhttpResponse.close();
         }
-    }
-
-    public CloseableHttpResponse getHttpResponse() {
-        return httpResponse;
-    }
-
-    public void setHttpResponse(CloseableHttpResponse httpResponse) {
-        this.httpResponse = httpResponse;
     }
 
     public Response getResponse() {

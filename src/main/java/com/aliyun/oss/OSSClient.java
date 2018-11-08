@@ -200,8 +200,7 @@ public class OSSClient implements OSS {
         if (config.isRequestTimeoutEnabled()) {
             this.serviceClient = new TimeoutServiceClient(config);
         } else {
-//            this.serviceClient = new DefaultServiceClient(config);
-            this.serviceClient = new OKHTTPServiceClient(config);
+            this.serviceClient = new DefaultServiceClient(config);
         }
         initOperations();
         setEndpoint(endpoint);

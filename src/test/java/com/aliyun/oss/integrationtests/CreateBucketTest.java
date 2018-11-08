@@ -25,7 +25,6 @@ import static com.aliyun.oss.integrationtests.TestConstants.INVALID_LOCATION_CON
 import static com.aliyun.oss.integrationtests.TestConstants.MODIFY_STORAGE_TYPE_ERR;
 import static com.aliyun.oss.integrationtests.TestConstants.TOO_MANY_BUCKETS_ERR;
 import static com.aliyun.oss.integrationtests.TestUtils.waitForCacheExpiration;
-//import static com.aliyun.oss.model.LocationConstraint.OSS_CN_SHENZHEN;
 
 import java.util.ArrayList;
 import java.util.List;

@@ -24,7 +24,6 @@ import static org.junit.Assert.assertEquals;
 import java.io.IOException;
 import java.net.SocketTimeoutException;
 
-import org.apache.http.conn.ConnectTimeoutException;
 import org.junit.Test;
 
 import com.aliyun.oss.ClientErrorCode;
@@ -37,9 +36,6 @@ public class ExceptionFactoryTest {
         SocketTimeoutException ste = new SocketTimeoutException();
         ClientException ex = ExceptionFactory.createNetworkException(ste);
         assertEquals(ex.getErrorCode(), ClientErrorCode.SOCKET_TIMEOUT);
-        ConnectTimeoutException cte = new ConnectTimeoutException();
-        ex = ExceptionFactory.createNetworkException(cte);
-        assertEquals(ex.getErrorCode(), ClientErrorCode.CONNECTION_TIMEOUT);
         IOException ioe = new IOException();
         ex = ExceptionFactory.createNetworkException(ioe);
         assertEquals(ex.getErrorCode(), ClientErrorCode.UNKNOWN);

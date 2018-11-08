@@ -32,6 +32,7 @@ public interface HttpHeaders {
     public static final String CONTENT_MD5 = "Content-MD5";
     public static final String CONTENT_TYPE = "Content-Type";
     public static final String TRANSFER_ENCODING = "Transfer-Encoding";
+    public static final String ACCEPT_ENCODING = "Accept-Encoding";
     public static final String DATE = "Date";
     public static final String ETAG = "ETag";
     public static final String EXPIRES = "Expires";
