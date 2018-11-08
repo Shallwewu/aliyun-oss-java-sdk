@@ -29,13 +29,8 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.UnsupportedEncodingException;
 
-import org.apache.http.HttpEntity;
-import org.apache.http.client.methods.HttpDelete;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.client.methods.HttpHead;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.client.methods.HttpPut;
-import org.apache.http.client.methods.HttpRequestBase;
+import okhttp3.Request;
+import okio.Buffer;
 import org.junit.Test;
 
 import com.aliyun.oss.HttpMethod;
@@ -45,7 +40,7 @@ public class HttpFactoryTest {
     @Test
     public void testCreateHttpRequest() throws Exception {
         ExecutionContext context = new ExecutionContext();
-        String url = "http://127.0.0.1";
+        String url = "http://127.0.0.1/";
         String content = "This is a test request";
         byte[] contentBytes = null;
         try {
@@ -60,43 +55,35 @@ public class HttpFactoryTest {
         ServiceClient.Request request = new ServiceClient.Request();
         request.setUrl(url);
 
-        HttpRequestBase httpRequest = null;
+        Request httpRequest = null;
 
         // GET
         request.setMethod(HttpMethod.GET);
         httpRequest = factory.createHttpRequest(request, context);
-        HttpGet getMethod = (HttpGet)httpRequest;
-        assertEquals(url, getMethod.getURI().toString());
+        assertEquals(url, httpRequest.url().uri().toString());
 
         // DELETE
         request.setMethod(HttpMethod.DELETE);
         httpRequest = factory.createHttpRequest(request, context);
-        HttpDelete delMethod = (HttpDelete)httpRequest;
-        assertEquals(url, delMethod.getURI().toString());
+        assertEquals(url, httpRequest.url().uri().toString());
 
         // HEAD
         request.setMethod(HttpMethod.HEAD);
         httpRequest = factory.createHttpRequest(request, context);
-        HttpHead headMethod = (HttpHead)httpRequest;
-        assertEquals(url, headMethod.getURI().toString());
+        assertEquals(url, httpRequest.url().uri().toString());
 
         //POST
         request.setContent(new ByteArrayInputStream(contentBytes));
         request.setContentLength(contentBytes.length);
         request.setMethod(HttpMethod.POST);
         httpRequest = factory.createHttpRequest(request, context);
-        HttpPost postMethod = (HttpPost)httpRequest;
-
-        assertEquals(url, postMethod.getURI().toString());
-        HttpEntity entity = postMethod.getEntity();
+        assertEquals(url, httpRequest.url().uri().toString());
+        Buffer buffer = new Buffer();
+        httpRequest.body().writeTo(buffer);
 
         try {
-            assertEquals(content, readSting(entity.getContent()));
+            assertEquals(content, buffer.readUtf8());
         } catch (IllegalStateException e) {
-            e.printStackTrace();
-            fail(e.getMessage());
-        } catch (IOException e) {
-            e.printStackTrace();
             fail(e.getMessage());
         }
 
@@ -105,16 +92,13 @@ public class HttpFactoryTest {
         request.setContentLength(contentBytes.length);
         request.setMethod(HttpMethod.PUT);
         httpRequest = factory.createHttpRequest(request, context);
-        HttpPut putMethod = (HttpPut)httpRequest;
 
-        assertEquals(url, putMethod.getURI().toString());
-        entity = putMethod.getEntity();
+        assertEquals(url, httpRequest.url().uri().toString());
+        buffer = new Buffer();
+        httpRequest.body().writeTo(buffer);
         try {
-            assertEquals(content, readSting(entity.getContent()));
+            assertEquals(content, buffer.readUtf8());
         } catch (IllegalStateException e) {
-            e.printStackTrace();
-            fail(e.getMessage());
-        } catch (IOException e) {
             e.printStackTrace();
             fail(e.getMessage());
         }

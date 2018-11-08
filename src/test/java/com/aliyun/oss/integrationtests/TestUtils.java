@@ -34,25 +34,10 @@ import java.net.URLDecoder;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileChannel.MapMode;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.X509TrustManager;
-
 import junit.framework.Assert;
-
-import org.apache.http.HttpResponse;
-import org.apache.http.NameValuePair;
-import org.apache.http.client.HttpClient;
-import org.apache.http.client.entity.UrlEncodedFormEntity;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.conn.scheme.Scheme;
-import org.apache.http.conn.ssl.SSLSocketFactory;
-import org.apache.http.impl.client.DefaultHttpClient;
-import org.apache.http.message.BasicNameValuePair;
 
 import com.aliyun.oss.ClientConfiguration;
 import com.aliyun.oss.OSSClient;
@@ -63,6 +48,7 @@ import com.aliyun.oss.common.utils.HttpUtil;
 import com.aliyun.oss.model.InitiateMultipartUploadRequest;
 import com.aliyun.oss.model.InitiateMultipartUploadResult;
 import com.aliyun.oss.model.PartETag;
+import okhttp3.*;
 import org.codehaus.jettison.json.JSONArray;
 import org.codehaus.jettison.json.JSONException;
 import org.codehaus.jettison.json.JSONObject;
@@ -79,40 +65,6 @@ public class TestUtils {
     private static final int MAX_RANDOM_LENGTH = 1 * 1024 * 1024 * 1024; // 1GB
     
     private static Random rand = new Random();
-    
-    private static HttpClient httpClient = null;
-    static {
-        httpClient = new DefaultHttpClient();
-        Scheme sch = new Scheme(Protocol.HTTPS.toString(), 443, getSSLSocketFactory());
-        httpClient.getConnectionManager().getSchemeRegistry().register(sch);
-    }
-    
-    private static SSLSocketFactory getSSLSocketFactory() {
-        TrustManager[] trustAllCerts = new TrustManager[] { new X509TrustManager() {
-            public java.security.cert.X509Certificate[] getAcceptedIssuers() {
-                return null; 
-            }
-
-            public void checkClientTrusted(
-                    java.security.cert.X509Certificate[] certs, String authType) {
-            }
-
-            public void checkServerTrusted(
-                    java.security.cert.X509Certificate[] certs, String authType) {
-            }
-        }};
-
-        try {
-            SSLContext sslcontext = SSLContext.getInstance("SSL");
-            sslcontext.init(null, trustAllCerts, null);
-            SSLSocketFactory ssf = new SSLSocketFactory(sslcontext, 
-                    SSLSocketFactory.ALLOW_ALL_HOSTNAME_VERIFIER);
-            return ssf;
-
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-    }
     
     private static byte pickupAlphabet() {
         int idx = new Random().nextInt(ALPHABETS.length);
@@ -365,49 +317,53 @@ public class TestUtils {
         
         return policyJsonObject.toString();
     }
-    
-    public static StsToken getStsToken(String grantor, String grantee, 
+
+    public static StsToken getStsToken(String grantor, String grantee,
             long durationSeconds, String policy) {
         try {
             URI apiUri = new URI(Protocol.HTTPS.toString(), null, "", 80,
                     "", null, null);
-            
-            HttpPost httpPost = new HttpPost(apiUri);
-            List<NameValuePair> nvps = new ArrayList<NameValuePair>();  
-            nvps.add(new BasicNameValuePair("STSVERSION", "1"));
-            nvps.add(new BasicNameValuePair("CALLERUID", grantor));  
-            nvps.add(new BasicNameValuePair("GRANTEE", grantee));  
-            nvps.add(new BasicNameValuePair("DURATIONSECONDS", String.valueOf(durationSeconds)));  
-            nvps.add(new BasicNameValuePair("POLICY", policy));  
-            nvps.add(new BasicNameValuePair("APIUSERNAME", ""));
-            nvps.add(new BasicNameValuePair("APIPASSWORD", ""));
-            nvps.add(new BasicNameValuePair("MFAPresent", "false"));
-            nvps.add(new BasicNameValuePair("OwnerId", grantor));
-            nvps.add(new BasicNameValuePair("CallerType", "customer"));
-            nvps.add(new BasicNameValuePair("ProxyTrustTransportInfo", "false"));
-            nvps.add(new BasicNameValuePair("CallerIp", "127.0.0.1"));
-            nvps.add(new BasicNameValuePair("ProxyCallerIp", "127.0.0.1"));
-            nvps.add(new BasicNameValuePair("ProxyCallerSecurityTransport", "false"));
-            nvps.add(new BasicNameValuePair("callerSecurityTransport", "true"));
-            httpPost.setEntity(new UrlEncodedFormEntity(nvps));  
-            httpPost.addHeader(HttpHeaders.CONTENT_TYPE, "application/x-www-form-urlencoded");
-            
-            HttpResponse httpResponse = httpClient.execute(httpPost);
-            InputStream responseBody = httpResponse.getEntity().getContent();
+
+            OkHttpClient client = new OkHttpClient();
+
+            FormBody formBody = new FormBody.Builder()
+                    .add("STSVERSION","1")
+                    .add("CALLERUID", grantor)
+                    .add("GRANTEE", grantee)
+                    .add("DURATIONSECONDS", String.valueOf(durationSeconds))
+                    .add("POLICY", policy)
+                    .add("APIUSERNAME", "")
+                    .add("APIPASSWORD", "")
+                    .add("MFAPresent", "false")
+                    .add("OwnerId", grantor)
+                    .add("CallerType", "customer")
+                    .add("ProxyTrustTransportInfo", "false")
+                    .add("CallerIp", "127.0.0.1")
+                    .add("ProxyCallerIp", "127.0.0.1")
+                    .add("ProxyCallerSecurityTransport", "false")
+                    .add("callerSecurityTransport", "true").build();
+            Request.Builder builder = new Request.Builder().post(formBody).url(apiUri.toURL())
+                    .addHeader(HttpHeaders.CONTENT_TYPE, "application/x-www-form-urlencoded");
+            Request request = builder.build();
+            Call call = client.newCall(request);
+
+            Response response = call.execute();
+
+            InputStream responseBody = response.body().byteStream();
             BufferedReader reader = new BufferedReader(new InputStreamReader(responseBody));
             String line = null;
-            StringBuilder tokenString = new StringBuilder(); 
+            StringBuilder tokenString = new StringBuilder();
             while ((line = reader.readLine()) != null) {
                 tokenString.append(line);
                 System.out.println(line);
             }
-            
+
             JSONObject tokenJsonObject = new JSONObject(tokenString.toString());
             JSONObject credsJsonObjson = tokenJsonObject.getJSONObject("Credentials");
             String accessKeyId = credsJsonObjson.getString("AccessKeyId");
             String secretAccessKey = credsJsonObjson.getString("AccessKeySecret");
             String securityToken = credsJsonObjson.getString("SecurityToken");
-            
+
             return new StsToken(accessKeyId, secretAccessKey, securityToken);
         } catch (Exception e) {
             throw new RuntimeException(e.getMessage());

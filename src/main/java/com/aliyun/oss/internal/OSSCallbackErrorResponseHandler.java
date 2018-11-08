@@ -20,7 +20,6 @@
 package com.aliyun.oss.internal;
 
 import static com.aliyun.oss.internal.OSSUtils.safeCloseResponse;
-import org.apache.http.HttpStatus;
 
 import com.aliyun.oss.ClientException;
 import com.aliyun.oss.ServiceException;
@@ -31,11 +30,14 @@ import com.aliyun.oss.common.parser.ResponseParseException;
 import com.aliyun.oss.common.utils.ExceptionFactory;
 import com.aliyun.oss.internal.model.OSSErrorResult;
 
+import static java.net.HttpURLConnection.HTTP_NOT_AUTHORITATIVE;
+
+
 public class OSSCallbackErrorResponseHandler implements ResponseHandler {
 
     @Override
     public void handle(ResponseMessage response) throws ServiceException, ClientException {
-        if (response.getStatusCode() == HttpStatus.SC_NON_AUTHORITATIVE_INFORMATION) {
+        if (response.getStatusCode() == HTTP_NOT_AUTHORITATIVE) {
             JAXBResponseParser parser = new JAXBResponseParser(OSSErrorResult.class);
             try {
                 OSSErrorResult errorResult = (OSSErrorResult) parser.parse(response);

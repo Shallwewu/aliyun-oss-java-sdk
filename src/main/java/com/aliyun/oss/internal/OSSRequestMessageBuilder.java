@@ -171,6 +171,10 @@ public class OSSRequestMessageBuilder {
         Map<String, String> sentHeaders = new HashMap<String, String>(this.headers);
         sentHeaders.put(HttpHeaders.DATE, DateUtil.formatRfc822Date(new Date()));
         sentHeaders.put(HttpHeaders.USER_AGENT, innerClient.getClientConfiguration().getUserAgent());
+
+        //avoid default gzip accept encoding added by okhttp
+        sentHeaders.put(HttpHeaders.ACCEPT_ENCODING, "*");
+
         Map<String, String> sentParameters = new LinkedHashMap<String, String>(this.parameters);
 
         RequestMessage request = new RequestMessage(this.originalRequest, this.bucket, this.key);

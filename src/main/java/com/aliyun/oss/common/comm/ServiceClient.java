@@ -30,8 +30,6 @@ import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
 import java.util.List;
 
-import org.apache.http.HttpMessage;
-
 import com.aliyun.oss.ClientConfiguration;
 import com.aliyun.oss.ClientException;
 import com.aliyun.oss.HttpMethod;
@@ -322,7 +320,7 @@ public abstract class ServiceClient {
      * Wrapper class based on {@link HttpMessage} that represents HTTP request
      * message to OSS.
      */
-    public static class Request extends HttpMesssage {
+    public static class Request extends HttpMessage {
         private String uri;
         private HttpMethod method;
         private boolean useUrlSignature = false;

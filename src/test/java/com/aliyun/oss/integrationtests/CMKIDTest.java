@@ -1,8 +1,8 @@
 package com.aliyun.oss.integrationtests;
 
+import com.aliyun.oss.common.utils.Base64;
 import com.aliyun.oss.model.*;
 import junit.framework.Assert;
-import org.apache.commons.codec.binary.Base64;
 import org.junit.Test;
 
 import javax.activation.MimetypesFileTypeMap;

@@ -20,15 +20,15 @@
 package com.aliyun.oss.common.auth;
 
 import java.io.IOException;
-import java.net.HttpURLConnection;
 import java.net.URL;
 
-import com.aliyun.oss.common.auth.Credentials;
 import com.aliyun.oss.common.utils.AuthUtils;
 import com.aliyuncs.exceptions.ClientException;
 import com.aliyuncs.http.HttpRequest;
 import com.aliyuncs.http.HttpResponse;
 import com.aliyuncs.http.MethodType;
+
+import static java.net.HttpURLConnection.HTTP_OK;
 
 public abstract class HttpCredentialsFetcher implements CredentialsFetcher {
     
@@ -57,7 +57,7 @@ public abstract class HttpCredentialsFetcher implements CredentialsFetcher {
     @Override
     public HttpResponse send(HttpRequest request) throws IOException {
         HttpResponse response = HttpResponse.getResponse(request);
-        if (response.getStatus() != HttpURLConnection.HTTP_OK) {
+        if (response.getStatus() != HTTP_OK) {
             throw new IOException("HttpCode=" + response.getStatus());
         }
         return response;

@@ -63,6 +63,7 @@ import static com.aliyun.oss.internal.ResponseParsers.putObjectProcessReponsePar
 import static com.aliyun.oss.internal.ResponseParsers.getSimplifiedObjectMetaResponseParser;
 import static com.aliyun.oss.internal.ResponseParsers.getSymbolicLinkResponseParser;
 import static com.aliyun.oss.internal.ResponseParsers.headObjectResponseParser;
+import static java.net.HttpURLConnection.HTTP_NOT_FOUND;
 
 import java.io.BufferedOutputStream;
 import java.io.ByteArrayInputStream;
@@ -80,7 +81,6 @@ import java.util.Map;
 import java.util.zip.CheckedInputStream;
 
 import com.aliyun.oss.model.*;
-import org.apache.http.HttpStatus;
 
 import com.aliyun.oss.ClientException;
 import com.aliyun.oss.HttpMethod;
@@ -445,7 +445,7 @@ public class OSSObjectOperation extends OSSOperation {
 
             @Override
             public void handle(ResponseMessage response) throws ServiceException, ClientException {
-                if (response.getStatusCode() == HttpStatus.SC_NOT_FOUND) {
+                if (response.getStatusCode() == HTTP_NOT_FOUND) {
                     safeCloseResponse(response);
                     throw ExceptionFactory.createOSSException(
                             response.getHeaders().get(OSSHeaders.OSS_HEADER_REQUEST_ID), OSSErrorCode.NO_SUCH_KEY,

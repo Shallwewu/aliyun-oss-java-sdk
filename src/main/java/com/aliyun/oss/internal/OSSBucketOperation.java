@@ -74,6 +74,7 @@ import static com.aliyun.oss.internal.ResponseParsers.getBucketImageResponsePars
 import static com.aliyun.oss.internal.ResponseParsers.getImageStyleResponseParser;
 import static com.aliyun.oss.internal.ResponseParsers.listImageStyleResponseParser;
 import static com.aliyun.oss.internal.ResponseParsers.getBucketImageProcessConfResponseParser;
+import static java.net.HttpURLConnection.HTTP_NOT_FOUND;
 
 import java.io.ByteArrayInputStream;
 import java.util.ArrayList;
@@ -136,7 +137,6 @@ import com.aliyun.oss.model.SetBucketWebsiteRequest;
 import com.aliyun.oss.model.TagSet;
 import com.aliyun.oss.model.Style;
 import com.aliyun.oss.model.UserQos;
-import org.apache.http.HttpStatus;
 
 /**
  * Bucket operation.
@@ -287,7 +287,7 @@ public class OSSBucketOperation extends OSSOperation {
         reponseHandlers.add(new ResponseHandler() {
             @Override
             public void handle(ResponseMessage response) throws ServiceException, ClientException {
-                if (response.getStatusCode() == HttpStatus.SC_NOT_FOUND) {
+                if (response.getStatusCode() == HTTP_NOT_FOUND) {
                     safeCloseResponse(response);
                     throw ExceptionFactory.createOSSException(
                             response.getHeaders().get(OSSHeaders.OSS_HEADER_REQUEST_ID), OSSErrorCode.NO_SUCH_BUCKET,
