@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 
 import com.aliyun.oss.common.auth.Credentials;
+import com.aliyun.oss.common.comm.OSSFutureTask;
 import com.aliyun.oss.common.comm.ResponseMessage;
 import com.aliyun.oss.model.*;
 import com.aliyun.oss.model.SetBucketCORSRequest.CORSRule;
@@ -619,6 +620,8 @@ public interface OSS {
      *         responsible to close the connection after usage.
      */
     public OSSObject getObject(GetObjectRequest getObjectRequest) throws OSSException, ClientException;
+
+    public <T> OSSFutureTask<T> getObjectAsync(GetObjectRequest getObjectRequest) throws OSSException, ClientException;
 
     /**
      * Select the {@link OSSObject} from the bucket specified in

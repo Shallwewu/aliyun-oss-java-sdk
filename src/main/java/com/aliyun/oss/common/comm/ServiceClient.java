@@ -77,6 +77,14 @@ public abstract class ServiceClient {
         }
     }
 
+    public <T> OSSFutureTask<T> sendRequestAsync(RequestMessage request, ExecutionContext context, CallbackImpl<T> callback) {
+
+        assertParameterNotNull(request, "request");
+        assertParameterNotNull(context, "context");
+
+        return sendRequestImplAsync(request, context, callback);
+    }
+
     private ResponseMessage sendRequestImpl(RequestMessage request, ExecutionContext context)
             throws ClientException, ServiceException {
 
@@ -173,10 +181,48 @@ public abstract class ServiceClient {
         }
     }
 
+    private <T> OSSFutureTask<T> sendRequestImplAsync(RequestMessage request, ExecutionContext context, CallbackImpl<T> callback)
+            throws ClientException, ServiceException {
+
+        RetryStrategy retryStrategy = context.getRetryStrategy() != null ? context.getRetryStrategy()
+                : this.getDefaultRetryStrategy();
+
+        // Sign the request if a signer provided.
+        if (context.getSigner() != null && !request.isUseUrlSignature()) {
+            context.getSigner().sign(request);
+        }
+
+        for (RequestSigner signer : context.getSignerHandlers()) {
+            signer.sign(request);
+        }
+
+        InputStream requestContent = request.getContent();
+        if (requestContent != null && requestContent.markSupported()) {
+            requestContent.mark(OSSConstants.DEFAULT_STREAM_BUFFER_SIZE);
+        }
+
+        /*
+         * The key four steps to send HTTP requests and receive HTTP
+         * responses.
+         */
+
+        // Step 1. Preprocess HTTP request.
+        handleRequest(request, context.getResquestHandlers());
+
+        // Step 2. Build HTTP request with specified request parameters
+        // and context.
+        Request httpRequest = buildRequest(request, context);
+
+        // Step 3. Send HTTP request to OSS.
+        return sendRequestCoreAsync(httpRequest, context, callback);
+    }
+
     /**
      * Implements the core logic to send requests to Aliyun OSS services.
      */
     protected abstract ResponseMessage sendRequestCore(Request request, ExecutionContext context) throws IOException;
+
+    protected abstract <T> OSSFutureTask<T> sendRequestCoreAsync(Request request, ExecutionContext context, CallbackImpl<T> callback);
 
     private Request buildRequest(RequestMessage requestMessage, ExecutionContext context) throws ClientException {
 

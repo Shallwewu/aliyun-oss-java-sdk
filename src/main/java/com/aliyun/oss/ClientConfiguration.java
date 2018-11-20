@@ -47,7 +47,7 @@ public class ClientConfiguration {
     public static final int DEFAULT_CONNECTION_REQUEST_TIMEOUT = -1;
     public static final int DEFAULT_CONNECTION_TIMEOUT = 50 * 1000;
     public static final int DEFAULT_SOCKET_TIMEOUT = 50 * 1000;
-    public static final int DEFAULT_MAX_CONNECTIONS = 1024;
+    public static final int DEFAULT_MAX_CONNECTIONS = 64;
     public static final long DEFAULT_CONNECTION_TTL = -1;
     public static final long DEFAULT_IDLE_CONNECTION_TIME = 60 * 1000;
     public static final int DEFAULT_VALIDATE_AFTER_INACTIVITY = 2 * 1000;
