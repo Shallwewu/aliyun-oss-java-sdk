@@ -31,11 +31,9 @@ public class DefaultServiceClient extends ServiceClient {
     public DefaultServiceClient(ClientConfiguration config) {
         super(config);
         ConnectionPool connectionPool = new ConnectionPool(config.getMaxIdleConnections(), config.getIdleConnectionTime(), TimeUnit.MILLISECONDS);
-
         OkHttpClient.Builder builder = new OkHttpClient.Builder().followRedirects(false).followSslRedirects(false)
                 .connectTimeout(config.getConnectionTimeout(), TimeUnit.MILLISECONDS).readTimeout(config.getReadTimeout(), TimeUnit.MILLISECONDS)
                 .writeTimeout(config.getWriteTimeout(), TimeUnit.MILLISECONDS).retryOnConnectionFailure(true).connectionPool(connectionPool);
-
         List<okhttp3.Protocol> protocols = new ArrayList<okhttp3.Protocol>();
         protocols.add(okhttp3.Protocol.HTTP_2);
         protocols.add(okhttp3.Protocol.HTTP_1_1);
@@ -125,6 +123,21 @@ public class DefaultServiceClient extends ServiceClient {
         }
 
         return buildResponse(request, response);
+    }
+
+    @Override
+    protected <T> OSSFutureTask<T> sendRequestCoreAsync(Request request, ExecutionContext context, CallbackImpl<T> callback) {
+        okhttp3.Request httpRequest = httpRequestFactory.createHttpRequest(request, context);
+
+        OSSFutureTask futureTask = new OSSFutureTask();
+        callback.setRequest(request);
+        callback.setContext(context);
+        AsyncOperationHandler.put(futureTask, callback);
+        Call call = httpClient.newCall(httpRequest);
+
+        call.enqueue(callback);
+
+        return futureTask;
     }
 
     protected static ResponseMessage buildResponse(ServiceClient.Request request, Response httpResponse)

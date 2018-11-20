@@ -31,8 +31,6 @@ import static com.aliyun.oss.common.utils.LogUtils.logException;
 import static com.aliyun.oss.event.ProgressPublisher.publishProgress;
 import static com.aliyun.oss.internal.OSSConstants.DEFAULT_BUFFER_SIZE;
 import static com.aliyun.oss.internal.OSSConstants.DEFAULT_CHARSET_NAME;
-import static com.aliyun.oss.internal.OSSHeaders.OSS_SELECT_CSV_ROWS;
-import static com.aliyun.oss.internal.OSSHeaders.OSS_SELECT_CSV_SPLITS;
 import static com.aliyun.oss.internal.OSSHeaders.OSS_SELECT_OUTPUT_RAW;
 import static com.aliyun.oss.internal.OSSUtils.OSS_RESOURCE_MANAGER;
 import static com.aliyun.oss.internal.OSSUtils.addDateHeader;
@@ -80,6 +78,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.zip.CheckedInputStream;
 
+import com.aliyun.oss.common.comm.*;
 import com.aliyun.oss.model.*;
 
 import com.aliyun.oss.ClientException;
@@ -88,10 +87,6 @@ import com.aliyun.oss.OSSErrorCode;
 import com.aliyun.oss.OSSException;
 import com.aliyun.oss.ServiceException;
 import com.aliyun.oss.common.auth.CredentialsProvider;
-import com.aliyun.oss.common.comm.RequestMessage;
-import com.aliyun.oss.common.comm.ResponseHandler;
-import com.aliyun.oss.common.comm.ResponseMessage;
-import com.aliyun.oss.common.comm.ServiceClient;
 import com.aliyun.oss.common.comm.io.RepeatableFileInputStream;
 import com.aliyun.oss.common.parser.ResponseParser;
 import com.aliyun.oss.common.utils.BinaryUtil;
@@ -394,6 +389,56 @@ public class OSSObjectOperation extends OSSOperation {
             safeClose(outputStream);
             safeClose(ossObject.getObjectContent());
         }
+    }
+
+    public OSSFutureTask<OSSObject> getObjectAsync(GetObjectRequest getObjectRequest) {
+
+        assertParameterNotNull(getObjectRequest, "getObjectRequest");
+
+        String bucketName = null;
+        String key = null;
+        RequestMessage request = null;
+
+        if (!getObjectRequest.isUseUrlSignature()) {
+            assertParameterNotNull(getObjectRequest, "getObjectRequest");
+
+            bucketName = getObjectRequest.getBucketName();
+            key = getObjectRequest.getKey();
+
+            assertParameterNotNull(bucketName, "bucketName");
+            assertParameterNotNull(key, "key");
+            ensureBucketNameValid(bucketName);
+            ensureObjectKeyValid(key);
+
+            Map<String, String> headers = new HashMap<String, String>();
+            populateGetObjectRequestHeaders(getObjectRequest, headers);
+
+            Map<String, String> params = new HashMap<String, String>();
+            populateResponseHeaderParameters(params, getObjectRequest.getResponseHeaders());
+
+            String process = getObjectRequest.getProcess();
+            if (process != null) {
+                params.put(RequestParameters.SUBRESOURCE_PROCESS, process);
+            }
+
+            request = new OSSRequestMessageBuilder(getInnerClient()).setEndpoint(getEndpoint())
+                    .setMethod(HttpMethod.GET).setBucket(bucketName).setKey(key).setHeaders(headers)
+                    .setParameters(params).setOriginalRequest(getObjectRequest).build();
+        } else {
+            request = new RequestMessage(getObjectRequest, bucketName, key);
+            request.setMethod(HttpMethod.GET);
+            request.setAbsoluteUrl(getObjectRequest.getAbsoluteUri());
+            request.setUseUrlSignature(true);
+            request.setHeaders(getObjectRequest.getHeaders());
+        }
+        CallbackImpl callback = new CallbackImpl<OSSObject>();
+        callback.setKeepResponseOpen(true);
+        callback.setParser(new GetObjectResponseParser(bucketName, key));
+        callback.setPostProcess(new AsyncGetOperationPostProcess());
+
+        OSSFutureTask<OSSObject> futureTask = doOperationAsync(request, bucketName, key, null, null, callback);
+
+        return futureTask;
     }
 
     /**

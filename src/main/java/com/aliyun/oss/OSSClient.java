@@ -548,6 +548,11 @@ public class OSSClient implements OSS {
     }
 
     @Override
+    public OSSFutureTask<OSSObject> getObjectAsync(GetObjectRequest getObjectRequest) throws OSSException, ClientException {
+        return objectOperation.getObjectAsync(getObjectRequest);
+    }
+
+    @Override
     public OSSObject selectObject(SelectObjectRequest selectObjectRequest) throws OSSException, ClientException {
         return objectOperation.selectObject(selectObjectRequest);
     }

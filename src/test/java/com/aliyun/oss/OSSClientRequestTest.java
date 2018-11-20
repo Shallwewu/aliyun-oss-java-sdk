@@ -37,17 +37,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 
+import com.aliyun.oss.common.comm.*;
+import com.aliyun.oss.common.parser.ResponseParser;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
 import com.aliyun.oss.common.auth.DefaultCredentialProvider;
 import com.aliyun.oss.common.auth.DefaultCredentials;
-import com.aliyun.oss.common.comm.ExecutionContext;
-import com.aliyun.oss.common.comm.RequestMessage;
-import com.aliyun.oss.common.comm.ResponseMessage;
-import com.aliyun.oss.common.comm.RetryStrategy;
-import com.aliyun.oss.common.comm.ServiceClient;
 import com.aliyun.oss.common.utils.DateUtil;
 import com.aliyun.oss.common.utils.HttpUtil;
 import com.aliyun.oss.common.utils.IOUtils;
@@ -87,6 +84,11 @@ public class OSSClientRequestTest {
         protected ResponseMessage sendRequestCore(ServiceClient.Request data, ExecutionContext context)
                 throws IOException {
             throw new RequestReceivedException(data);
+        }
+
+        @Override
+        protected <T> OSSFutureTask<T> sendRequestCoreAsync(Request request, ExecutionContext context, CallbackImpl<T> callback) {
+            return null;
         }
 
         @Override
