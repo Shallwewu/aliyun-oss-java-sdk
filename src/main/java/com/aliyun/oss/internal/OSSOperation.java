@@ -197,6 +197,8 @@ public abstract class OSSOperation {
             }
         }
 
+        callback.setClientConfiguration(this.getInnerClient().getClientConfiguration());
+
         return sendAsync(request, context, callback);
     }
 

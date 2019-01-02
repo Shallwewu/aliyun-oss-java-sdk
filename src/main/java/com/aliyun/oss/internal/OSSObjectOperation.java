@@ -170,6 +170,26 @@ public class OSSObjectOperation extends OSSOperation {
     }
 
     /**
+     * Upload an object asynchronously.
+     */
+    public OSSFutureTask<PutObjectResult> putObjectAsync(PutObjectRequest putObjectRequest) {
+        assertParameterNotNull(putObjectRequest, "putObjectRequest");
+
+        CallbackImpl callback = new CallbackImpl<OSSObject>();
+        callback.setPostProcess(new AsyncPutOperationPostProcess());
+        OSSFutureTask<PutObjectResult> futureTask = null;
+
+        if (!isNeedReturnResponse(putObjectRequest)) {
+            futureTask = writeObjectInternalAsync(WriteMode.OVERWRITE, putObjectRequest, putObjectReponseParser, callback);
+        } else {
+            futureTask = writeObjectInternalAsync(WriteMode.OVERWRITE, putObjectRequest, putObjectProcessReponseParser, callback);
+        }
+
+        return futureTask;
+    }
+
+
+    /**
      * Upload input stream or file to oss by append mode.
      */
     public AppendObjectResult appendObject(AppendObjectRequest appendObjectRequest)
@@ -391,6 +411,9 @@ public class OSSObjectOperation extends OSSOperation {
         }
     }
 
+    /**
+     * Get an object asynchronously.
+     */
     public OSSFutureTask<OSSObject> getObjectAsync(GetObjectRequest getObjectRequest) {
 
         assertParameterNotNull(getObjectRequest, "getObjectRequest");
@@ -805,6 +828,7 @@ public class OSSObjectOperation extends OSSOperation {
         }
     }
 
+
     private static enum MetadataDirective {
 
         /* Copy metadata from source object */
@@ -947,6 +971,85 @@ public class OSSObjectOperation extends OSSOperation {
         } catch (RuntimeException e) {
             publishProgress(listener, ProgressEventType.TRANSFER_FAILED_EVENT);
             throw e;
+        }
+        return result;
+    }
+
+
+    private <RequestType extends PutObjectRequest, ResponseType> OSSFutureTask<ResponseType> writeObjectInternalAsync(WriteMode mode,
+            RequestType originalRequest, ResponseParser<ResponseType> responseParser, CallbackImpl callback) {
+
+        final String bucketName = originalRequest.getBucketName();
+        final String key = originalRequest.getKey();
+        InputStream originalInputStream = originalRequest.getInputStream();
+        ObjectMetadata metadata = originalRequest.getMetadata();
+        if (metadata == null) {
+            metadata = new ObjectMetadata();
+        }
+
+        assertParameterNotNull(bucketName, "bucketName");
+        assertParameterNotNull(key, "key");
+        ensureBucketNameValid(bucketName);
+        ensureObjectKeyValid(key);
+        ensureCallbackValid(originalRequest.getCallback());
+
+        InputStream repeatableInputStream = null;
+        if (originalRequest.getFile() != null) {
+            File toUpload = originalRequest.getFile();
+
+            if (!checkFile(toUpload)) {
+                getLog().info("Illegal file path: " + toUpload.getPath());
+                throw new ClientException("Illegal file path: " + toUpload.getPath());
+            }
+
+            metadata.setContentLength(toUpload.length());
+            if (metadata.getContentType() == null) {
+                metadata.setContentType(Mimetypes.getInstance().getMimetype(toUpload, key));
+            }
+
+            try {
+                repeatableInputStream = new RepeatableFileInputStream(toUpload);
+            } catch (IOException ex) {
+                logException("Cannot locate file to upload: ", ex);
+                throw new ClientException("Cannot locate file to upload: ", ex);
+            }
+        } else {
+            assertTrue(originalInputStream != null, "Please specify input stream or file to upload");
+
+            if (metadata.getContentType() == null) {
+                metadata.setContentType(Mimetypes.getInstance().getMimetype(key));
+            }
+
+            try {
+                repeatableInputStream = newRepeatableInputStream(originalInputStream);
+            } catch (IOException ex) {
+                logException("Cannot wrap to repeatable input stream: ", ex);
+                throw new ClientException("Cannot wrap to repeatable input stream: ", ex);
+            }
+        }
+
+        Map<String, String> headers = new HashMap<String, String>();
+        populateRequestMetadata(headers, metadata);
+        populateRequestCallback(headers, originalRequest.getCallback());
+        Map<String, String> params = new LinkedHashMap<String, String>();
+        populateWriteObjectParams(mode, originalRequest, params);
+
+        RequestMessage httpRequest = new OSSRequestMessageBuilder(getInnerClient()).setEndpoint(getEndpoint())
+                .setMethod(WriteMode.getMappingMethod(mode)).setBucket(bucketName).setKey(key).setHeaders(headers)
+                .setParameters(params).setInputStream(repeatableInputStream)
+                .setInputSize(determineInputStreamLength(repeatableInputStream, metadata.getContentLength()))
+                .setOriginalRequest(originalRequest).build();
+
+        List<ResponseHandler> reponseHandlers = new ArrayList<ResponseHandler>();
+        reponseHandlers.add(new OSSCallbackErrorResponseHandler());
+        OSSFutureTask<ResponseType> result = null;
+        callback.setParser(responseParser);
+        callback.setKeepResponseOpen(true);
+
+        if (originalRequest.getCallback() == null) {
+            result = doOperationAsync(httpRequest, bucketName, key, null, null, callback);
+        } else {
+            result = doOperationAsync(httpRequest, bucketName, key, null, reponseHandlers, callback);
         }
         return result;
     }

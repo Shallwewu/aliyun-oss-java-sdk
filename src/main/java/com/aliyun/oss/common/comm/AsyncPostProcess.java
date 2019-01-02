@@ -4,5 +4,5 @@ import java.io.IOException;
 
 public interface AsyncPostProcess<T> {
 
-    public void postProcess(T response, long begin) throws IOException;
+    public void postProcess(T response, CallbackImpl callback) throws IOException;
 }

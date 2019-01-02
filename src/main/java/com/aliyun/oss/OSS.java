@@ -554,6 +554,20 @@ public interface OSS {
     public PutObjectResult putObject(URL signedUrl, InputStream requestContent, long contentLength,
             Map<String, String> requestHeaders, boolean useChunkEncoding) throws OSSException, ClientException;
 
+
+    /**
+     * Uploads the file with {@link PutObjectRequest}, which is a asynchronous api, the result
+     * will be ready after the asynchronous task has been completed, the caller could get the
+     * result with {@link OSSFutureTask<PutObjectResult>}
+     * @param putObjectRequest
+     *            The {@link PutObjectRequest} instance that has bucket name,
+     *            object key, metadata information.
+     * @return  A {@link OSSFutureTask<PutObjectResult>} instance.
+     * @throws OSSException
+     * @throws ClientException
+     */
+    public OSSFutureTask<PutObjectResult> putObjectAsync(PutObjectRequest putObjectRequest) throws OSSException, ClientException;
+
     /**
      * Copies an existing file in OSS from source bucket to the target bucket.
      * If target file exists, it would be overwritten by the source file.
@@ -622,7 +636,17 @@ public interface OSS {
      */
     public OSSObject getObject(GetObjectRequest getObjectRequest) throws OSSException, ClientException;
 
-    public <T> OSSFutureTask<T> getObjectAsync(GetObjectRequest getObjectRequest) throws OSSException, ClientException;
+    /**
+     * Gets the {@link OSSFutureTask<OSSObject>}, a asynchronous task for get
+     * a object from the bucket, the caller could get the object later after the
+     * asynchronous task has been completed.
+     * @param getObjectRequest
+     * @return  A {@link OSSFutureTask<OSSObject>} instance which the caller could get the result
+     *          after the asynchronous task has been completed.
+     * @throws OSSException
+     * @throws ClientException
+     */
+    public OSSFutureTask<OSSObject> getObjectAsync(GetObjectRequest getObjectRequest) throws OSSException, ClientException;
 
     /**
      * Select the {@link OSSObject} from the bucket specified in
@@ -643,7 +667,7 @@ public interface OSS {
 
     /**
      * Gets the {@link OSSObject} from the signed Url.
-     * 
+     *
      * @param signedUrl
      *            The signed Url.
      * @param requestHeaders

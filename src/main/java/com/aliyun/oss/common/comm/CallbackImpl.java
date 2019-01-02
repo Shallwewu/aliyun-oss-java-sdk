@@ -1,8 +1,6 @@
 package com.aliyun.oss.common.comm;
 
-import com.aliyun.oss.ClientException;
-import com.aliyun.oss.OSSException;
-import com.aliyun.oss.ServiceException;
+import com.aliyun.oss.*;
 import com.aliyun.oss.common.parser.ResponseParseException;
 import com.aliyun.oss.common.parser.ResponseParser;
 import com.aliyun.oss.common.utils.ExceptionFactory;
@@ -20,8 +18,6 @@ import static com.aliyun.oss.internal.OSSUtils.COMMON_RESOURCE_MANAGER;
 
 public class CallbackImpl<T> implements Callback {
 
-    private Long begin;
-
     private RequestMessage requestMessage;
 
     private ServiceClient.Request request;
@@ -37,6 +33,8 @@ public class CallbackImpl<T> implements Callback {
     private Exception exception;
 
     private AsyncPostProcess postProcess;
+
+    private ClientConfiguration clientConfiguration;
 
     private CountDownLatch latch = new CountDownLatch(1);
 
@@ -114,6 +112,14 @@ public class CallbackImpl<T> implements Callback {
         return result;
     }
 
+    public ClientConfiguration getClientConfiguration() {
+        return clientConfiguration;
+    }
+
+    public void setClientConfiguration(ClientConfiguration clientConfiguration) {
+        this.clientConfiguration = clientConfiguration;
+    }
+
     @Override
     public void onFailure(Call call, IOException e) {
         exception = ExceptionFactory.createNetworkException(e);
@@ -129,7 +135,7 @@ public class CallbackImpl<T> implements Callback {
 
             result = parser.parse(responseMessage);
 
-            postProcess.postProcess(result, begin);
+            postProcess.postProcess(result, this);
         } catch (ServiceException sex) {
             logException("[Server]Unable to execute HTTP request: ", sex,
                     requestMessage.getOriginalRequest().isLogEnabled());

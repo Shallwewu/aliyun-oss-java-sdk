@@ -516,6 +516,11 @@ public class OSSClient implements OSS {
     }
 
     @Override
+    public OSSFutureTask<PutObjectResult> putObjectAsync(PutObjectRequest putObjectRequest) throws OSSException, ClientException {
+        return objectOperation.putObjectAsync(putObjectRequest);
+    }
+
+    @Override
     public CopyObjectResult copyObject(String sourceBucketName, String sourceKey, String destinationBucketName,
             String destinationKey) throws OSSException, ClientException {
         return copyObject(new CopyObjectRequest(sourceBucketName, sourceKey, destinationBucketName, destinationKey));

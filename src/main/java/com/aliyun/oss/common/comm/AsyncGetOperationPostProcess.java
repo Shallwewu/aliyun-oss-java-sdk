@@ -10,7 +10,7 @@ import java.util.zip.CheckedInputStream;
 public class AsyncGetOperationPostProcess implements AsyncPostProcess<OSSObject> {
 
     @Override
-    public void postProcess(OSSObject ossObject, long begin) throws IOException {
+    public void postProcess(OSSObject ossObject, CallbackImpl callback) throws IOException {
         InputStream instream = ossObject.getObjectContent();
         CRC64 crc = new CRC64();
         CheckedInputStream checkedInputstream = new CheckedInputStream(instream, crc);
