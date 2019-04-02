@@ -48,6 +48,7 @@ import com.aliyun.oss.common.auth.CredentialsProvider;
 import com.aliyun.oss.common.auth.DefaultCredentialProvider;
 import com.aliyun.oss.common.auth.ServiceSignature;
 import com.aliyun.oss.common.comm.*;
+import com.aliyun.oss.model.OSSFuture;
 import com.aliyun.oss.common.utils.BinaryUtil;
 import com.aliyun.oss.common.utils.DateUtil;
 import com.aliyun.oss.internal.*;
@@ -516,11 +517,6 @@ public class OSSClient implements OSS {
     }
 
     @Override
-    public OSSFutureTask<PutObjectResult> putObjectAsync(PutObjectRequest putObjectRequest) throws OSSException, ClientException {
-        return objectOperation.putObjectAsync(putObjectRequest);
-    }
-
-    @Override
     public CopyObjectResult copyObject(String sourceBucketName, String sourceKey, String destinationBucketName,
             String destinationKey) throws OSSException, ClientException {
         return copyObject(new CopyObjectRequest(sourceBucketName, sourceKey, destinationBucketName, destinationKey));
@@ -550,11 +546,6 @@ public class OSSClient implements OSS {
     public OSSObject getObject(URL signedUrl, Map<String, String> requestHeaders) throws OSSException, ClientException {
         GetObjectRequest getObjectRequest = new GetObjectRequest(signedUrl, requestHeaders);
         return objectOperation.getObject(getObjectRequest);
-    }
-
-    @Override
-    public OSSFutureTask<OSSObject> getObjectAsync(GetObjectRequest getObjectRequest) throws OSSException, ClientException {
-        return objectOperation.getObjectAsync(getObjectRequest);
     }
 
     @Override

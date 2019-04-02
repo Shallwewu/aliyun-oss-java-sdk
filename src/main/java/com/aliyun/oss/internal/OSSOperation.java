@@ -34,6 +34,8 @@ import com.aliyun.oss.common.auth.Credentials;
 import com.aliyun.oss.common.auth.CredentialsProvider;
 import com.aliyun.oss.common.auth.RequestSigner;
 import com.aliyun.oss.common.comm.*;
+import com.aliyun.oss.common.comm.async.CallbackImpl;
+import com.aliyun.oss.model.OSSFuture;
 import com.aliyun.oss.common.parser.ResponseParseException;
 import com.aliyun.oss.common.parser.ResponseParser;
 import com.aliyun.oss.common.utils.ExceptionFactory;
@@ -92,8 +94,9 @@ public abstract class OSSOperation {
         }
     }
 
-    protected <T> OSSFutureTask<T> sendAsync(RequestMessage request, ExecutionContext context, CallbackImpl<T> callback) {
-        return client.sendRequestAsync(request, context, callback);
+    protected <T, RESULT> OSSFuture<RESULT> asyncSend(RequestMessage request, ExecutionContext context, CallbackImpl<T, RESULT> callback)
+            throws ClientException {
+        return client.asyncSendRequest(request, context, callback);
     }
 
     protected <T> T doOperation(RequestMessage request, ResponseParser<T> parser, String bucketName, String key)
@@ -158,8 +161,9 @@ public abstract class OSSOperation {
         }
     }
 
-    protected <T> OSSFutureTask<T> doOperationAsync(RequestMessage request, String bucketName, String key, List<RequestHandler> requestHandlers,
-                                                    List<ResponseHandler> reponseHandlers, CallbackImpl<T> callback) {
+    protected <T, RESULT> OSSFuture<RESULT> asyncDoOperation(RequestMessage request, String bucketName, String key, List<RequestHandler> requestHandlers,
+                                                List<ResponseHandler> reponseHandlers, CallbackImpl<T, RESULT> callback)
+            throws ClientException {
 
         final WebServiceRequest originalRequest = request.getOriginalRequest();
         request.getHeaders().putAll(client.getClientConfiguration().getDefaultHeaders());
@@ -198,8 +202,9 @@ public abstract class OSSOperation {
         }
 
         callback.setClientConfiguration(this.getInnerClient().getClientConfiguration());
+        callback.setRequestMessage(request);
 
-        return sendAsync(request, context, callback);
+        return asyncSend(request, context, callback);
     }
 
     private static RequestSigner createSigner(HttpMethod method, String bucketName, String key, Credentials creds, SignVersion signatureVersion) {

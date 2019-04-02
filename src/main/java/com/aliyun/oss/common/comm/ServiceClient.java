@@ -35,6 +35,8 @@ import com.aliyun.oss.ClientException;
 import com.aliyun.oss.HttpMethod;
 import com.aliyun.oss.ServiceException;
 import com.aliyun.oss.common.auth.RequestSigner;
+import com.aliyun.oss.common.comm.async.CallbackImpl;
+import com.aliyun.oss.model.OSSFuture;
 import com.aliyun.oss.common.utils.HttpUtil;
 import com.aliyun.oss.common.utils.LogUtils;
 import com.aliyun.oss.internal.OSSConstants;
@@ -77,12 +79,12 @@ public abstract class ServiceClient {
         }
     }
 
-    public <T> OSSFutureTask<T> sendRequestAsync(RequestMessage request, ExecutionContext context, CallbackImpl<T> callback) {
-
+    public <T, RESULT> OSSFuture<RESULT> asyncSendRequest(RequestMessage request, ExecutionContext context, CallbackImpl<T, RESULT> callback)
+            throws ClientException {
         assertParameterNotNull(request, "request");
         assertParameterNotNull(context, "context");
 
-        return sendRequestImplAsync(request, context, callback);
+        return asyncSendRequestImpl(request, context, callback);
     }
 
     private ResponseMessage sendRequestImpl(RequestMessage request, ExecutionContext context)
@@ -181,9 +183,8 @@ public abstract class ServiceClient {
         }
     }
 
-    private <T> OSSFutureTask<T> sendRequestImplAsync(RequestMessage request, ExecutionContext context, CallbackImpl<T> callback)
-            throws ClientException, ServiceException {
-
+    private <T, RESULT> OSSFuture<RESULT> asyncSendRequestImpl(RequestMessage request, ExecutionContext context, CallbackImpl<T, RESULT> callback)
+            throws ClientException {
         RetryStrategy retryStrategy = context.getRetryStrategy() != null ? context.getRetryStrategy()
                 : this.getDefaultRetryStrategy();
 
@@ -214,7 +215,7 @@ public abstract class ServiceClient {
         Request httpRequest = buildRequest(request, context);
 
         // Step 3. Send HTTP request to OSS.
-        return sendRequestCoreAsync(httpRequest, context, callback);
+        return asyncSendRequestCore(httpRequest, context, callback);
     }
 
     /**
@@ -222,7 +223,7 @@ public abstract class ServiceClient {
      */
     protected abstract ResponseMessage sendRequestCore(Request request, ExecutionContext context) throws IOException;
 
-    protected abstract <T> OSSFutureTask<T> sendRequestCoreAsync(Request request, ExecutionContext context, CallbackImpl<T> callback);
+    protected abstract <T, RESULT> OSSFuture<RESULT> asyncSendRequestCore(Request request, ExecutionContext context, CallbackImpl<T, RESULT> callback);
 
     private Request buildRequest(RequestMessage requestMessage, ExecutionContext context) throws ClientException {
 

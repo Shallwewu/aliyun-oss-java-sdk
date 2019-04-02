@@ -38,7 +38,8 @@ import java.util.Map;
 import java.util.Map.Entry;
 
 import com.aliyun.oss.common.comm.*;
-import com.aliyun.oss.common.parser.ResponseParser;
+import com.aliyun.oss.common.comm.async.CallbackImpl;
+import com.aliyun.oss.model.OSSFuture;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -87,7 +88,7 @@ public class OSSClientRequestTest {
         }
 
         @Override
-        protected <T> OSSFutureTask<T> sendRequestCoreAsync(Request request, ExecutionContext context, CallbackImpl<T> callback) {
+        protected <T, RESULT> OSSFuture<RESULT> asyncSendRequestCore(Request request, ExecutionContext context, CallbackImpl<T, RESULT> callback) {
             return null;
         }
 

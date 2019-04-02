@@ -54,26 +54,7 @@ import static com.aliyun.oss.internal.RequestParameters.SUBRESOURCE_STYLE;
 import static com.aliyun.oss.internal.RequestParameters.SUBRESOURCE_TAGGING;
 import static com.aliyun.oss.internal.RequestParameters.SUBRESOURCE_WEBSITE;
 import static com.aliyun.oss.internal.RequestParameters.SUBRESOURCE_PROCESS_CONF;
-import static com.aliyun.oss.internal.ResponseParsers.getBucketAclResponseParser;
-import static com.aliyun.oss.internal.ResponseParsers.getBucketLifecycleResponseParser;
-import static com.aliyun.oss.internal.ResponseParsers.getBucketLocationResponseParser;
-import static com.aliyun.oss.internal.ResponseParsers.getBucketLoggingResponseParser;
-import static com.aliyun.oss.internal.ResponseParsers.getBucketRefererResponseParser;
-import static com.aliyun.oss.internal.ResponseParsers.getBucketTaggingResponseParser;
-import static com.aliyun.oss.internal.ResponseParsers.getBucketWebsiteResponseParser;
-import static com.aliyun.oss.internal.ResponseParsers.getBucketReplicationResponseParser;
-import static com.aliyun.oss.internal.ResponseParsers.getBucketReplicationProgressResponseParser;
-import static com.aliyun.oss.internal.ResponseParsers.getBucketReplicationLocationResponseParser;
-import static com.aliyun.oss.internal.ResponseParsers.getBucketCnameResponseParser;
-import static com.aliyun.oss.internal.ResponseParsers.getBucketInfoResponseParser;
-import static com.aliyun.oss.internal.ResponseParsers.getBucketStatResponseParser;
-import static com.aliyun.oss.internal.ResponseParsers.getBucketQosResponseParser;
-import static com.aliyun.oss.internal.ResponseParsers.listBucketResponseParser;
-import static com.aliyun.oss.internal.ResponseParsers.listObjectsReponseParser;
-import static com.aliyun.oss.internal.ResponseParsers.getBucketImageResponseParser;
-import static com.aliyun.oss.internal.ResponseParsers.getImageStyleResponseParser;
-import static com.aliyun.oss.internal.ResponseParsers.listImageStyleResponseParser;
-import static com.aliyun.oss.internal.ResponseParsers.getBucketImageProcessConfResponseParser;
+import static com.aliyun.oss.internal.ResponseParsers.*;
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND;
 
 import java.io.ByteArrayInputStream;
@@ -83,60 +64,18 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.aliyun.oss.ClientException;
-import com.aliyun.oss.HttpMethod;
-import com.aliyun.oss.OSSErrorCode;
-import com.aliyun.oss.OSSException;
-import com.aliyun.oss.ServiceException;
+import com.aliyun.oss.*;
 import com.aliyun.oss.common.auth.CredentialsProvider;
 import com.aliyun.oss.common.comm.RequestMessage;
 import com.aliyun.oss.common.comm.ResponseHandler;
 import com.aliyun.oss.common.comm.ResponseMessage;
 import com.aliyun.oss.common.comm.ServiceClient;
+import com.aliyun.oss.common.comm.async.AsyncPostProcess;
+import com.aliyun.oss.common.comm.async.CallbackImpl;
 import com.aliyun.oss.common.utils.BinaryUtil;
 import com.aliyun.oss.common.utils.ExceptionFactory;
 import com.aliyun.oss.common.utils.HttpHeaders;
-import com.aliyun.oss.model.AccessControlList;
-import com.aliyun.oss.model.Bucket;
-import com.aliyun.oss.model.BucketInfo;
-import com.aliyun.oss.model.BucketList;
-import com.aliyun.oss.model.BucketLoggingResult;
-import com.aliyun.oss.model.BucketMetadata;
-import com.aliyun.oss.model.BucketProcess;
-import com.aliyun.oss.model.BucketReferer;
-import com.aliyun.oss.model.BucketReplicationProgress;
-import com.aliyun.oss.model.BucketStat;
-import com.aliyun.oss.model.BucketWebsiteResult;
-import com.aliyun.oss.model.CannedAccessControlList;
-import com.aliyun.oss.model.CnameConfiguration;
-import com.aliyun.oss.model.CreateBucketRequest;
-import com.aliyun.oss.model.DeleteBucketCnameRequest;
-import com.aliyun.oss.model.DeleteBucketReplicationRequest;
-import com.aliyun.oss.model.GenericRequest;
-import com.aliyun.oss.model.GetBucketImageResult;
-import com.aliyun.oss.model.GetBucketReplicationProgressRequest;
-import com.aliyun.oss.model.ImageProcess;
-import com.aliyun.oss.model.ReplicationRule;
-import com.aliyun.oss.model.GetImageStyleResult;
-import com.aliyun.oss.model.LifecycleRule;
-import com.aliyun.oss.model.ListBucketsRequest;
-import com.aliyun.oss.model.ListObjectsRequest;
-import com.aliyun.oss.model.ObjectListing;
-import com.aliyun.oss.model.PutBucketImageRequest;
-import com.aliyun.oss.model.PutImageStyleRequest;
-import com.aliyun.oss.model.SetBucketAclRequest;
-import com.aliyun.oss.model.AddBucketCnameRequest;
-import com.aliyun.oss.model.SetBucketLifecycleRequest;
-import com.aliyun.oss.model.SetBucketLoggingRequest;
-import com.aliyun.oss.model.SetBucketProcessRequest;
-import com.aliyun.oss.model.SetBucketRefererRequest;
-import com.aliyun.oss.model.AddBucketReplicationRequest;
-import com.aliyun.oss.model.SetBucketStorageCapacityRequest;
-import com.aliyun.oss.model.SetBucketTaggingRequest;
-import com.aliyun.oss.model.SetBucketWebsiteRequest;
-import com.aliyun.oss.model.TagSet;
-import com.aliyun.oss.model.Style;
-import com.aliyun.oss.model.UserQos;
+import com.aliyun.oss.model.*;
 
 /**
  * Bucket operation.
@@ -390,11 +329,8 @@ public class OSSBucketOperation extends OSSOperation {
         return true;
     }
 
-    /**
-     * List objects under the specified bucket.
-     */
-    public ObjectListing listObjects(ListObjectsRequest listObjectsRequest) throws OSSException, ClientException {
-
+    private RequestMessage listObjectsRequestBuild(ListObjectsRequest listObjectsRequest)
+    {
         assertParameterNotNull(listObjectsRequest, "listObjectsRequest");
 
         String bucketName = listObjectsRequest.getBucketName();
@@ -408,7 +344,30 @@ public class OSSBucketOperation extends OSSOperation {
                 .setMethod(HttpMethod.GET).setBucket(bucketName).setParameters(params)
                 .setOriginalRequest(listObjectsRequest).build();
 
-        return doOperation(request, listObjectsReponseParser, bucketName, null, true);
+        return request;
+    }
+
+    /**
+     * List objects under the specified bucket.
+     */
+    public ObjectListing listObjects(ListObjectsRequest listObjectsRequest) throws OSSException, ClientException {
+        RequestMessage request = listObjectsRequestBuild(listObjectsRequest);
+
+        return doOperation(request, listObjectsReponseParser, request.getBucket(), null, true);
+    }
+
+    public OSSFuture<ObjectListing> asyncListObjects(ListObjectsRequest listObjectsRequest, AsyncHandler<ObjectListing> handler) throws ClientException {
+        RequestMessage request = listObjectsRequestBuild(listObjectsRequest);
+
+        CallbackImpl callback = new CallbackImpl<ObjectListing, ObjectListing>();
+        callback.setParser(listObjectsReponseParser);
+        callback.setPostProcess(new AsyncPostProcess());
+        callback.setAsyncHandler(handler);
+        callback.setKeepResponseOpen(true);
+
+        OSSFuture<ObjectListing> futureTask = asyncDoOperation(request, request.getBucket(), null, null, null, callback);
+
+        return futureTask;
     }
 
     /**

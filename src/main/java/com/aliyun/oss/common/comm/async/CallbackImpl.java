@@ -1,6 +1,7 @@
-package com.aliyun.oss.common.comm;
+package com.aliyun.oss.common.comm.async;
 
 import com.aliyun.oss.*;
+import com.aliyun.oss.common.comm.*;
 import com.aliyun.oss.common.parser.ResponseParseException;
 import com.aliyun.oss.common.parser.ResponseParser;
 import com.aliyun.oss.common.utils.ExceptionFactory;
@@ -16,11 +17,13 @@ import java.util.concurrent.CountDownLatch;
 import static com.aliyun.oss.common.utils.LogUtils.logException;
 import static com.aliyun.oss.internal.OSSUtils.COMMON_RESOURCE_MANAGER;
 
-public class CallbackImpl<T> implements Callback {
+public class CallbackImpl<T, RESULT> implements Callback {
 
     private RequestMessage requestMessage;
 
     private ServiceClient.Request request;
+
+    private ClientConfiguration clientConfiguration;
 
     private ExecutionContext context;
 
@@ -28,17 +31,15 @@ public class CallbackImpl<T> implements Callback {
 
     private boolean keepResponseOpen;
 
-    private ResponseMessage responseMessage;
-
     private Exception exception;
 
     private AsyncPostProcess postProcess;
 
-    private ClientConfiguration clientConfiguration;
+    private AsyncHandler<RESULT> asyncHandler;
 
     private CountDownLatch latch = new CountDownLatch(1);
 
-    private T result;
+    private RESULT wrappedResult;
 
     public RequestMessage getRequestMessage() {
         return requestMessage;
@@ -52,48 +53,32 @@ public class CallbackImpl<T> implements Callback {
         return request;
     }
 
-    public void setRequest(ServiceClient.Request request) {
-        this.request = request;
+    public ClientConfiguration getClientConfiguration() {
+        return clientConfiguration;
     }
 
-    public ExecutionContext getContext() {
-        return context;
+    public void setClientConfiguration(ClientConfiguration clientConfiguration) {
+        this.clientConfiguration = clientConfiguration;
+    }
+
+    public void setRequest(ServiceClient.Request request) {
+        this.request = request;
     }
 
     public void setContext(ExecutionContext context) {
         this.context = context;
     }
 
-    public ResponseParser<T> getParser() {
-        return parser;
-    }
-
     public void setParser(ResponseParser<T> parser) {
         this.parser = parser;
-    }
-
-    public boolean getKeepResponseOpen() {
-        return keepResponseOpen;
     }
 
     public void setKeepResponseOpen(boolean keepResponseOpen) {
         this.keepResponseOpen = keepResponseOpen;
     }
 
-    public AsyncPostProcess getPostProcess() {
-        return postProcess;
-    }
-
     public void setPostProcess(AsyncPostProcess postProcess) {
         this.postProcess = postProcess;
-    }
-
-    public ResponseMessage getResponseMessage() {
-        return responseMessage;
-    }
-
-    public void setResponseMessage(ResponseMessage responseMessage) {
-        this.responseMessage = responseMessage;
     }
 
     public Exception getException() {
@@ -108,34 +93,55 @@ public class CallbackImpl<T> implements Callback {
         return latch;
     }
 
-    public T getResult() {
-        return result;
+    public void setAsyncHandler(AsyncHandler<RESULT> asyncHandler) {
+        this.asyncHandler = asyncHandler;
     }
 
-    public ClientConfiguration getClientConfiguration() {
-        return clientConfiguration;
+    public RESULT getWrappedResult() {
+        return wrappedResult;
     }
 
-    public void setClientConfiguration(ClientConfiguration clientConfiguration) {
-        this.clientConfiguration = clientConfiguration;
+    public void setWrappedResult(RESULT wrappedResult) {
+        this.wrappedResult = wrappedResult;
+    }
+
+    private void asyncCallback() {
+        try {
+            if (asyncHandler != null) {
+                if (exception != null) {
+                    asyncHandler.onError(exception);
+                } else {
+                    asyncHandler.onSuccess(wrappedResult);
+                }
+            }
+        } catch (Exception ex) {
+            logException("[Client]user async call back exception: ", ex,
+                    requestMessage.getOriginalRequest().isLogEnabled());
+        }
     }
 
     @Override
     public void onFailure(Call call, IOException e) {
-        exception = ExceptionFactory.createNetworkException(e);
-        latch.countDown();
+        try {
+            exception = ExceptionFactory.createNetworkException(e);
+            asyncCallback();
+        } finally {
+            latch.countDown();
+        }
     }
 
     @Override
     public void onResponse(Call call, Response response) {
+        ResponseMessage responseMessage = null;
+
         try {
             responseMessage = DefaultServiceClient.buildResponse(request, response);
 
             handleResponse(responseMessage, context.getResponseHandlers());
 
-            result = parser.parse(responseMessage);
+            T parseResult = parser.parse(responseMessage);
 
-            postProcess.postProcess(result, this);
+            postProcess.postProcess(parseResult, this);
         } catch (ServiceException sex) {
             logException("[Server]Unable to execute HTTP request: ", sex,
                     requestMessage.getOriginalRequest().isLogEnabled());
@@ -163,6 +169,7 @@ public class CallbackImpl<T> implements Callback {
             } catch (IOException iex) {
                 logException("Unexpected io exception when trying to close http request: ", iex);
             }
+            asyncCallback();
             latch.countDown();
         }
     }

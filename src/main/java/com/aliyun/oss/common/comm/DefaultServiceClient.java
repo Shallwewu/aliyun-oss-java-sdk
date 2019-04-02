@@ -1,6 +1,9 @@
 package com.aliyun.oss.common.comm;
 
 import com.aliyun.oss.*;
+import com.aliyun.oss.common.comm.async.AsyncOperationManager;
+import com.aliyun.oss.common.comm.async.CallbackImpl;
+import com.aliyun.oss.model.OSSFuture;
 import com.aliyun.oss.common.utils.ExceptionFactory;
 import com.aliyun.oss.common.utils.HttpHeaders;
 import com.aliyun.oss.common.utils.HttpUtil;
@@ -114,6 +117,7 @@ public class DefaultServiceClient extends ServiceClient {
         okhttp3.Request httpRequest = httpRequestFactory.createHttpRequest(request, context);
 
         Response response;
+
         Call call = httpClient.newCall(httpRequest);
         try {
             response = call.execute();
@@ -126,13 +130,14 @@ public class DefaultServiceClient extends ServiceClient {
     }
 
     @Override
-    protected <T> OSSFutureTask<T> sendRequestCoreAsync(Request request, ExecutionContext context, CallbackImpl<T> callback) {
+    protected <T, RESULT> OSSFuture<RESULT> asyncSendRequestCore(Request request, ExecutionContext context, CallbackImpl<T, RESULT> callback) {
         okhttp3.Request httpRequest = httpRequestFactory.createHttpRequest(request, context);
 
-        OSSFutureTask futureTask = new OSSFutureTask();
+        OSSFuture futureTask = new OSSFuture();
         callback.setRequest(request);
         callback.setContext(context);
-        AsyncOperationHandler.put(futureTask, callback);
+        AsyncOperationManager.put(futureTask, callback);
+
         Call call = httpClient.newCall(httpRequest);
 
         call.enqueue(callback);
@@ -140,7 +145,7 @@ public class DefaultServiceClient extends ServiceClient {
         return futureTask;
     }
 
-    protected static ResponseMessage buildResponse(ServiceClient.Request request, Response httpResponse)
+    public static ResponseMessage buildResponse(ServiceClient.Request request, Response httpResponse)
             throws IOException {
 
         assert (httpResponse != null);

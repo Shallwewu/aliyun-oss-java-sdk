@@ -1,18 +1,20 @@
-package com.aliyun.oss.common.comm;
+package com.aliyun.oss.model;
 
 import com.aliyun.oss.ClientException;
 import com.aliyun.oss.OSSException;
+import com.aliyun.oss.common.comm.async.AsyncOperationManager;
+import com.aliyun.oss.common.comm.async.CallbackImpl;
 
 import java.util.concurrent.CountDownLatch;
 
-public class OSSFutureTask<T> {
+public class OSSFuture<T> {
 
     public T get() throws OSSException, ClientException {
         try {
-            CountDownLatch latch = AsyncOperationHandler.getLatch(this);
+            CountDownLatch latch = AsyncOperationManager.getLatch(this);
             latch.await();
 
-            CallbackImpl<T> callback = AsyncOperationHandler.delete(this);
+            CallbackImpl<Object, T> callback = AsyncOperationManager.get(this);
 
             if (callback != null) {
                 Exception ex = callback.getException();
@@ -24,14 +26,19 @@ public class OSSFutureTask<T> {
                         throw (OSSException) ex;
                     }
                 }
-                return callback.getResult();
+                return callback.getWrappedResult();
             }
             return null;
         } catch (InterruptedException iex) {
             throw new ClientException(iex.getMessage(), iex);
         } finally {
-            AsyncOperationHandler.delete(this);
+            AsyncOperationManager.delete(this);
         }
+    }
 
+    @Override
+    protected void finalize() throws Throwable {
+        AsyncOperationManager.delete(this);
+        super.finalize();
     }
 }
