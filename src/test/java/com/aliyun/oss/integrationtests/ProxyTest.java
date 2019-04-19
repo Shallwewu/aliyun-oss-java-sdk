@@ -31,13 +31,15 @@ import com.aliyun.oss.OSSClientBuilder;
 import com.aliyun.oss.model.BucketInfo;
 import com.aliyun.oss.model.OSSObject;
 import com.aliyun.oss.model.ObjectMetadata;
+import org.junit.Test;
 
 /**
  * Test proxy
  */
+@Ignore
 public class ProxyTest extends TestBase {
 
-    @Ignore
+    @Test
     public void testProxy() {
         String key = "test/test.txt";
         String content = "Hello OSS.";

@@ -34,6 +34,8 @@ import com.aliyun.oss.common.auth.Credentials;
 import com.aliyun.oss.common.auth.CredentialsProvider;
 import com.aliyun.oss.common.auth.RequestSigner;
 import com.aliyun.oss.common.comm.*;
+import com.aliyun.oss.common.comm.async.CallbackImpl;
+import com.aliyun.oss.model.OSSFuture;
 import com.aliyun.oss.common.parser.ResponseParseException;
 import com.aliyun.oss.common.parser.ResponseParser;
 import com.aliyun.oss.common.utils.ExceptionFactory;
@@ -90,6 +92,11 @@ public abstract class OSSOperation {
                 safeCloseResponse(response);
             }
         }
+    }
+
+    protected <T, RESULT> OSSFuture<RESULT> asyncSend(RequestMessage request, ExecutionContext context, CallbackImpl<T, RESULT> callback)
+            throws ClientException {
+        return client.asyncSendRequest(request, context, callback);
     }
 
     protected <T> T doOperation(RequestMessage request, ResponseParser<T> parser, String bucketName, String key)
@@ -152,6 +159,52 @@ public abstract class OSSOperation {
             logException("Unable to parse response error: ", rpe);
             throw oe;
         }
+    }
+
+    protected <T, RESULT> OSSFuture<RESULT> asyncDoOperation(RequestMessage request, String bucketName, String key, List<RequestHandler> requestHandlers,
+                                                List<ResponseHandler> reponseHandlers, CallbackImpl<T, RESULT> callback)
+            throws ClientException {
+
+        final WebServiceRequest originalRequest = request.getOriginalRequest();
+        request.getHeaders().putAll(client.getClientConfiguration().getDefaultHeaders());
+        request.getHeaders().putAll(originalRequest.getHeaders());
+        request.getParameters().putAll(originalRequest.getParameters());
+
+        ExecutionContext context = createDefaultContext(request.getMethod(), bucketName, key);
+
+        if (context.getCredentials().useSecurityToken() && !request.isUseUrlSignature()) {
+            request.addHeader(OSSHeaders.OSS_SECURITY_TOKEN, context.getCredentials().getSecurityToken());
+        }
+
+        context.addRequestHandler(new RequestProgressHanlder());
+        if (requestHandlers != null) {
+            for (RequestHandler handler : requestHandlers)
+                context.addRequestHandler(handler);
+        }
+        if (client.getClientConfiguration().isCrcCheckEnabled()) {
+            context.addRequestHandler(new RequestChecksumHanlder());
+        }
+
+        context.addResponseHandler(new ResponseProgressHandler(originalRequest));
+        if (reponseHandlers != null) {
+            for (ResponseHandler handler : reponseHandlers)
+                context.addResponseHandler(handler);
+        }
+        if (client.getClientConfiguration().isCrcCheckEnabled()) {
+            context.addResponseHandler(new ResponseChecksumHandler());
+        }
+
+        List<RequestSigner> signerHandlers = this.client.getClientConfiguration().getSignerHandlers();
+        if (signerHandlers != null) {
+            for (RequestSigner signer : signerHandlers) {
+                context.addSignerHandler(signer);
+            }
+        }
+
+        callback.setClientConfiguration(this.getInnerClient().getClientConfiguration());
+        callback.setRequestMessage(request);
+
+        return asyncSend(request, context, callback);
     }
 
     private static RequestSigner createSigner(HttpMethod method, String bucketName, String key, Credentials creds, SignVersion signatureVersion) {

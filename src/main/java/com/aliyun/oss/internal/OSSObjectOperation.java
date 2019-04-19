@@ -31,8 +31,6 @@ import static com.aliyun.oss.common.utils.LogUtils.logException;
 import static com.aliyun.oss.event.ProgressPublisher.publishProgress;
 import static com.aliyun.oss.internal.OSSConstants.DEFAULT_BUFFER_SIZE;
 import static com.aliyun.oss.internal.OSSConstants.DEFAULT_CHARSET_NAME;
-import static com.aliyun.oss.internal.OSSHeaders.OSS_SELECT_CSV_ROWS;
-import static com.aliyun.oss.internal.OSSHeaders.OSS_SELECT_CSV_SPLITS;
 import static com.aliyun.oss.internal.OSSHeaders.OSS_SELECT_OUTPUT_RAW;
 import static com.aliyun.oss.internal.OSSUtils.OSS_RESOURCE_MANAGER;
 import static com.aliyun.oss.internal.OSSUtils.addDateHeader;
@@ -63,6 +61,7 @@ import static com.aliyun.oss.internal.ResponseParsers.putObjectProcessReponsePar
 import static com.aliyun.oss.internal.ResponseParsers.getSimplifiedObjectMetaResponseParser;
 import static com.aliyun.oss.internal.ResponseParsers.getSymbolicLinkResponseParser;
 import static com.aliyun.oss.internal.ResponseParsers.headObjectResponseParser;
+import static java.net.HttpURLConnection.HTTP_NOT_FOUND;
 
 import java.io.BufferedOutputStream;
 import java.io.ByteArrayInputStream;
@@ -79,19 +78,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.zip.CheckedInputStream;
 
+import com.aliyun.oss.*;
+import com.aliyun.oss.common.comm.*;
+import com.aliyun.oss.common.comm.async.*;
+import com.aliyun.oss.model.OSSFuture;
 import com.aliyun.oss.model.*;
-import org.apache.http.HttpStatus;
 
-import com.aliyun.oss.ClientException;
-import com.aliyun.oss.HttpMethod;
-import com.aliyun.oss.OSSErrorCode;
-import com.aliyun.oss.OSSException;
-import com.aliyun.oss.ServiceException;
 import com.aliyun.oss.common.auth.CredentialsProvider;
-import com.aliyun.oss.common.comm.RequestMessage;
-import com.aliyun.oss.common.comm.ResponseHandler;
-import com.aliyun.oss.common.comm.ResponseMessage;
-import com.aliyun.oss.common.comm.ServiceClient;
 import com.aliyun.oss.common.comm.io.RepeatableFileInputStream;
 import com.aliyun.oss.common.parser.ResponseParser;
 import com.aliyun.oss.common.utils.BinaryUtil;
@@ -175,6 +168,30 @@ public class OSSObjectOperation extends OSSOperation {
     }
 
     /**
+     * Upload an object asynchronously.
+     */
+    public OSSFuture<PutObjectResult> asyncPutObject(PutObjectRequest putObjectRequest, AsyncHandler<PutObjectResult> handler)
+            throws ClientException {
+        assertParameterNotNull(putObjectRequest, "putObjectRequest");
+
+        CallbackImpl callback = new CallbackImpl<PutObjectResult, PutObjectResult>();
+        callback.setPostProcess(new AsyncPutOperationPostProcess());
+        callback.setAsyncHandler(handler);
+        OSSFuture<PutObjectResult> futureTask = null;
+
+        if (!isNeedReturnResponse(putObjectRequest)) {
+            callback.setParser(putObjectReponseParser);
+            futureTask = AsyncWriteObjectInternal(WriteMode.OVERWRITE, putObjectRequest, callback);
+        } else {
+            callback.setParser(putObjectProcessReponseParser);
+            futureTask = AsyncWriteObjectInternal(WriteMode.OVERWRITE, putObjectRequest, callback);
+        }
+
+        return futureTask;
+    }
+
+
+    /**
      * Upload input stream or file to oss by append mode.
      */
     public AppendObjectResult appendObject(AppendObjectRequest appendObjectRequest)
@@ -195,6 +212,21 @@ public class OSSObjectOperation extends OSSOperation {
         }
 
         return result;
+    }
+
+    public OSSFuture<AppendObjectResult> asyncAppendObject(AppendObjectRequest appendObjectRequest, AsyncHandler<AppendObjectResult> handler)
+            throws ClientException {
+
+        assertParameterNotNull(appendObjectRequest, "appendObjectRequest");
+
+        CallbackImpl callback = new CallbackImpl<AppendObjectResult, AppendObjectResult>();
+        callback.setParser(appendObjectResponseParser);
+        callback.setPostProcess(new AsyncAppendOperationPostProcess(appendObjectRequest));
+        callback.setAsyncHandler(handler);
+
+        OSSFuture<AppendObjectResult> futureTask = AsyncWriteObjectInternal(WriteMode.APPEND, appendObjectRequest, callback);
+
+        return futureTask;
     }
 
     public SelectObjectMetadata createSelectObjectMetadata(CreateSelectObjectMetadataRequest createSelectObjectMetadataRequest) throws OSSException, ClientException {
@@ -296,11 +328,7 @@ public class OSSObjectOperation extends OSSOperation {
         }
     }
 
-    /**
-     * Pull an object from oss.
-     */
-    public OSSObject getObject(GetObjectRequest getObjectRequest) throws OSSException, ClientException {
-
+    private RequestMessage getObjectRequestBuild(GetObjectRequest getObjectRequest) {
         assertParameterNotNull(getObjectRequest, "getObjectRequest");
 
         String bucketName = null;
@@ -339,12 +367,20 @@ public class OSSObjectOperation extends OSSOperation {
             request.setUseUrlSignature(true);
             request.setHeaders(getObjectRequest.getHeaders());
         }
+        return request;
+    }
+
+    /**
+     * Pull an object from oss.
+     */
+    public OSSObject getObject(GetObjectRequest getObjectRequest) throws OSSException, ClientException {
+        RequestMessage request = getObjectRequestBuild(getObjectRequest);
 
         final ProgressListener listener = getObjectRequest.getProgressListener();
         OSSObject ossObject = null;
         try {
             publishProgress(listener, ProgressEventType.TRANSFER_STARTED_EVENT);
-            ossObject = doOperation(request, new GetObjectResponseParser(bucketName, key), bucketName, key, true);
+            ossObject = doOperation(request, new GetObjectResponseParser(request.getBucket(), request.getKey()), request.getBucket(), request.getKey(), true);
             InputStream instream = ossObject.getObjectContent();
             ProgressInputStream progressInputStream = new ProgressInputStream(instream, listener) {
                 @Override
@@ -397,10 +433,39 @@ public class OSSObjectOperation extends OSSOperation {
     }
 
     /**
-     * Get simplified object meta.
+     * Get an object asynchronously.
      */
-    public SimplifiedObjectMeta getSimplifiedObjectMeta(GenericRequest genericRequest) {
+    public OSSFuture<OSSObject> asyncGetObject(GetObjectRequest getObjectRequest, AsyncHandler<OSSObject> handler)
+            throws ClientException {
+        RequestMessage request = getObjectRequestBuild(getObjectRequest);
+        CallbackImpl callback = new CallbackImpl<OSSObject, OSSObject>();
+        callback.setKeepResponseOpen(true);
+        callback.setParser(new GetObjectResponseParser(request.getBucket(), request.getKey()));
+        callback.setPostProcess(new AsyncGetOperationPostProcess());
+        callback.setAsyncHandler(handler);
 
+        OSSFuture<OSSObject> futureTask = asyncDoOperation(request, request.getBucket(), request.getKey(), null, null, callback);
+
+        return futureTask;
+    }
+
+    public OSSFuture<ObjectMetadata> asyncGetObject(GetObjectRequest getObjectRequest, File file, AsyncHandler<ObjectMetadata> handler)
+            throws ClientException {
+        assertParameterNotNull(file, "file");
+        RequestMessage request = getObjectRequestBuild(getObjectRequest);
+
+        CallbackImpl callback = new CallbackImpl<OSSObject, ObjectMetadata>();
+        callback.setKeepResponseOpen(true);
+        callback.setParser(new GetObjectResponseParser(request.getBucket(), request.getKey()));
+        callback.setPostProcess(new AsyncGetOperationToFilePostProcess(file));
+        callback.setAsyncHandler(handler);
+
+        OSSFuture<ObjectMetadata> futureTask = asyncDoOperation(request, request.getBucket(), request.getKey(), null, null, callback);
+
+        return futureTask;
+    }
+
+    private RequestMessage getSimplifiedObjectMetaRequestBuild(GenericRequest genericRequest) {
         assertParameterNotNull(genericRequest, "genericRequest");
 
         String bucketName = genericRequest.getBucketName();
@@ -417,8 +482,30 @@ public class OSSObjectOperation extends OSSOperation {
         RequestMessage request = new OSSRequestMessageBuilder(getInnerClient()).setEndpoint(getEndpoint())
                 .setMethod(HttpMethod.GET).setBucket(bucketName).setKey(key).setParameters(params)
                 .setOriginalRequest(genericRequest).build();
+        return request;
+    }
 
-        return doOperation(request, getSimplifiedObjectMetaResponseParser, bucketName, key, true);
+    /**
+     * Get simplified object meta.
+     */
+    public SimplifiedObjectMeta getSimplifiedObjectMeta(GenericRequest genericRequest) {
+        RequestMessage request = getSimplifiedObjectMetaRequestBuild(genericRequest);
+
+        return doOperation(request, getSimplifiedObjectMetaResponseParser, request.getBucket(), request.getKey(), true);
+    }
+
+    public OSSFuture<SimplifiedObjectMeta> asyncGetSimplifiedObjectMeta(GenericRequest genericRequest, AsyncHandler<SimplifiedObjectMeta> handler)
+            throws ClientException {
+        RequestMessage request = getSimplifiedObjectMetaRequestBuild(genericRequest);
+
+        CallbackImpl callback = new CallbackImpl<SimplifiedObjectMeta, SimplifiedObjectMeta>();
+        callback.setKeepResponseOpen(true);
+        callback.setParser(getSimplifiedObjectMetaResponseParser);
+        callback.setPostProcess(new AsyncPostProcess());
+        callback.setAsyncHandler(handler);
+
+        OSSFuture<SimplifiedObjectMeta> futureTask = asyncDoOperation(request, request.getBucket(), request.getKey(), null, null, callback);
+        return futureTask;
     }
 
     /**
@@ -445,7 +532,7 @@ public class OSSObjectOperation extends OSSOperation {
 
             @Override
             public void handle(ResponseMessage response) throws ServiceException, ClientException {
-                if (response.getStatusCode() == HttpStatus.SC_NOT_FOUND) {
+                if (response.getStatusCode() == HTTP_NOT_FOUND) {
                     safeCloseResponse(response);
                     throw ExceptionFactory.createOSSException(
                             response.getHeaders().get(OSSHeaders.OSS_HEADER_REQUEST_ID), OSSErrorCode.NO_SUCH_KEY,
@@ -458,11 +545,7 @@ public class OSSObjectOperation extends OSSOperation {
         return doOperation(request, getObjectMetadataResponseParser, bucketName, key, true, null, reponseHandlers);
     }
 
-    /**
-     * Copy an existing object to another one.
-     */
-    public CopyObjectResult copyObject(CopyObjectRequest copyObjectRequest) throws OSSException, ClientException {
-
+    private RequestMessage copyObjectRequestBuild(CopyObjectRequest copyObjectRequest) {
         assertParameterNotNull(copyObjectRequest, "copyObjectRequest");
 
         Map<String, String> headers = new HashMap<String, String>();
@@ -472,16 +555,41 @@ public class OSSObjectOperation extends OSSOperation {
                 .setMethod(HttpMethod.PUT).setBucket(copyObjectRequest.getDestinationBucketName())
                 .setKey(copyObjectRequest.getDestinationKey()).setHeaders(headers).setOriginalRequest(copyObjectRequest)
                 .build();
+        return request;
+    }
+
+    /**
+     * Copy an existing object to another one.
+     */
+    public CopyObjectResult copyObject(CopyObjectRequest copyObjectRequest) throws OSSException, ClientException {
+        RequestMessage request = copyObjectRequestBuild(copyObjectRequest);
 
         return doOperation(request, copyObjectResponseParser, copyObjectRequest.getDestinationBucketName(),
                 copyObjectRequest.getDestinationKey(), true);
     }
 
     /**
+     * Copy an existing object to another one.
+     */
+    public OSSFuture<CopyObjectResult> asyncCopyObject(CopyObjectRequest copyObjectRequest, AsyncHandler<CopyObjectResult> handler)
+            throws ClientException {
+        RequestMessage request = copyObjectRequestBuild(copyObjectRequest);
+
+        CallbackImpl callback = new CallbackImpl<CopyObjectResult, CopyObjectResult>();
+        callback.setKeepResponseOpen(true);
+        callback.setParser(copyObjectResponseParser);
+        callback.setPostProcess(new AsyncPostProcess());
+        callback.setAsyncHandler(handler);
+
+        OSSFuture<CopyObjectResult> futureTask = asyncDoOperation(request, copyObjectRequest.getDestinationBucketName(), copyObjectRequest.getDestinationKey(), null, null, callback);
+
+        return futureTask;
+    }
+
+    /**
      * Delete an object.
      */
     public void deleteObject(GenericRequest genericRequest) throws OSSException, ClientException {
-
         assertParameterNotNull(genericRequest, "genericRequest");
 
         String bucketName = genericRequest.getBucketName();
@@ -526,11 +634,8 @@ public class OSSObjectOperation extends OSSOperation {
         return doOperation(request, deleteObjectsResponseParser, bucketName, null, true);
     }
 
-    /**
-     * Get head information.
-     */
-    public ObjectMetadata headObject(HeadObjectRequest headObjectRequest) throws OSSException, ClientException {
-
+    private RequestMessage headObjectRequestBuild(HeadObjectRequest headObjectRequest)
+    {
         assertParameterNotNull(headObjectRequest, "headObjectRequest");
 
         String bucketName = headObjectRequest.getBucketName();
@@ -554,8 +659,30 @@ public class OSSObjectOperation extends OSSOperation {
         RequestMessage request = new OSSRequestMessageBuilder(getInnerClient()).setEndpoint(getEndpoint())
                 .setMethod(HttpMethod.HEAD).setBucket(bucketName).setKey(key).setHeaders(headers)
                 .setOriginalRequest(headObjectRequest).build();
+        return request;
+    }
 
-        return doOperation(request, headObjectResponseParser, bucketName, key);
+    /**
+     * Get head information.
+     */
+    public ObjectMetadata headObject(HeadObjectRequest headObjectRequest) throws OSSException, ClientException {
+        RequestMessage request = headObjectRequestBuild(headObjectRequest);
+
+        return doOperation(request, headObjectResponseParser, request.getBucket(), request.getKey());
+    }
+
+    public OSSFuture<ObjectMetadata> asyncHeadObject(HeadObjectRequest headObjectRequest, AsyncHandler<ObjectMetadata> handler)
+        throws ClientException {
+        RequestMessage request = headObjectRequestBuild(headObjectRequest);
+
+        CallbackImpl callback = new CallbackImpl<ObjectMetadata, ObjectMetadata>();
+        callback.setParser(headObjectResponseParser);
+        callback.setPostProcess(new AsyncPostProcess());
+        callback.setAsyncHandler(handler);
+
+        OSSFuture<ObjectMetadata> futureTask = asyncDoOperation(request, request.getBucket(), request.getKey(), null, null, callback);
+
+        return futureTask;
     }
 
     public void setObjectAcl(SetObjectAclRequest setObjectAclRequest) throws OSSException, ClientException {
@@ -760,6 +887,7 @@ public class OSSObjectOperation extends OSSOperation {
         }
     }
 
+
     private static enum MetadataDirective {
 
         /* Copy metadata from source object */
@@ -902,6 +1030,84 @@ public class OSSObjectOperation extends OSSOperation {
         } catch (RuntimeException e) {
             publishProgress(listener, ProgressEventType.TRANSFER_FAILED_EVENT);
             throw e;
+        }
+        return result;
+    }
+
+
+    private <RequestType extends PutObjectRequest, ResponseType> OSSFuture<ResponseType> AsyncWriteObjectInternal(WriteMode mode,
+                                                                                                                  RequestType originalRequest, CallbackImpl callback) throws ClientException {
+
+        final String bucketName = originalRequest.getBucketName();
+        final String key = originalRequest.getKey();
+        InputStream originalInputStream = originalRequest.getInputStream();
+        ObjectMetadata metadata = originalRequest.getMetadata();
+        if (metadata == null) {
+            metadata = new ObjectMetadata();
+        }
+
+        assertParameterNotNull(bucketName, "bucketName");
+        assertParameterNotNull(key, "key");
+        ensureBucketNameValid(bucketName);
+        ensureObjectKeyValid(key);
+        ensureCallbackValid(originalRequest.getCallback());
+
+        InputStream repeatableInputStream = null;
+        if (originalRequest.getFile() != null) {
+            File toUpload = originalRequest.getFile();
+
+            if (!checkFile(toUpload)) {
+                getLog().info("Illegal file path: " + toUpload.getPath());
+                throw new ClientException("Illegal file path: " + toUpload.getPath());
+            }
+
+            metadata.setContentLength(toUpload.length());
+            if (metadata.getContentType() == null) {
+                metadata.setContentType(Mimetypes.getInstance().getMimetype(toUpload, key));
+            }
+
+            try {
+                repeatableInputStream = new RepeatableFileInputStream(toUpload);
+            } catch (IOException ex) {
+                logException("Cannot locate file to upload: ", ex);
+                throw new ClientException("Cannot locate file to upload: ", ex);
+            }
+        } else {
+            assertTrue(originalInputStream != null, "Please specify input stream or file to upload");
+
+            if (metadata.getContentType() == null) {
+                metadata.setContentType(Mimetypes.getInstance().getMimetype(key));
+            }
+
+            try {
+                repeatableInputStream = newRepeatableInputStream(originalInputStream);
+            } catch (IOException ex) {
+                logException("Cannot wrap to repeatable input stream: ", ex);
+                throw new ClientException("Cannot wrap to repeatable input stream: ", ex);
+            }
+        }
+
+        Map<String, String> headers = new HashMap<String, String>();
+        populateRequestMetadata(headers, metadata);
+        populateRequestCallback(headers, originalRequest.getCallback());
+        Map<String, String> params = new LinkedHashMap<String, String>();
+        populateWriteObjectParams(mode, originalRequest, params);
+
+        RequestMessage httpRequest = new OSSRequestMessageBuilder(getInnerClient()).setEndpoint(getEndpoint())
+                .setMethod(WriteMode.getMappingMethod(mode)).setBucket(bucketName).setKey(key).setHeaders(headers)
+                .setParameters(params).setInputStream(repeatableInputStream)
+                .setInputSize(determineInputStreamLength(repeatableInputStream, metadata.getContentLength()))
+                .setOriginalRequest(originalRequest).build();
+
+        List<ResponseHandler> reponseHandlers = new ArrayList<ResponseHandler>();
+        reponseHandlers.add(new OSSCallbackErrorResponseHandler());
+        OSSFuture<ResponseType> result = null;
+        callback.setKeepResponseOpen(true);
+
+        if (originalRequest.getCallback() == null) {
+            result = asyncDoOperation(httpRequest, bucketName, key, null, null, callback);
+        } else {
+            result = asyncDoOperation(httpRequest, bucketName, key, null, reponseHandlers, callback);
         }
         return result;
     }

@@ -32,9 +32,9 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-import org.apache.http.client.methods.CloseableHttpResponse;
-import org.apache.http.client.methods.HttpRequestBase;
-import org.apache.http.client.protocol.HttpClientContext;
+import okhttp3.Call;
+import okhttp3.Request;
+import okhttp3.Response;
 
 import com.aliyun.oss.ClientConfiguration;
 import com.aliyun.oss.ClientException;
@@ -60,24 +60,21 @@ public class TimeoutServiceClient extends DefaultServiceClient {
 
     @Override
     public ResponseMessage sendRequestCore(ServiceClient.Request request, ExecutionContext context) throws IOException {
-        HttpRequestBase httpRequest = httpRequestFactory.createHttpRequest(request, context);
-        HttpClientContext httpContext = HttpClientContext.create();
-        httpContext.setRequestConfig(this.requestConfig);
-
-        CloseableHttpResponse httpResponse = null;
-        HttpRequestTask httpRequestTask = new HttpRequestTask(httpRequest, httpContext);
-        Future<CloseableHttpResponse> future = executor.submit(httpRequestTask);
+        okhttp3.Request httpRequest = httpRequestFactory.createHttpRequest(request, context);
+        HttpRequestTask httpRequestTask = new HttpRequestTask(httpRequest);
+        Future<Response> future = executor.submit(httpRequestTask);
+        Response httpResponse;
 
         try {
             httpResponse = future.get(this.config.getRequestTimeout(), TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
             logException("[ExecutorService]The current thread was interrupted while waiting: ", e);
 
-            httpRequest.abort();
+            httpRequestTask.cancel();
             throw new ClientException(e.getMessage(), e);
         } catch (ExecutionException e) {
             RuntimeException ex;
-            httpRequest.abort();
+            httpRequestTask.cancel();
 
             if (e.getCause() instanceof IOException) {
                 ex = ExceptionFactory.createNetworkException((IOException) e.getCause());
@@ -90,7 +87,7 @@ public class TimeoutServiceClient extends DefaultServiceClient {
         } catch (TimeoutException e) {
             logException("[ExecutorService]The wait " + this.config.getRequestTimeout() + " timed out: ", e);
 
-            httpRequest.abort();
+            httpRequestTask.cancel();
             throw new ClientException(e.getMessage(), OSSErrorCode.REQUEST_TIMEOUT, "Unknown", e);
         }
 
@@ -116,19 +113,24 @@ public class TimeoutServiceClient extends DefaultServiceClient {
         super.shutdown();
     }
 
-    class HttpRequestTask implements Callable<CloseableHttpResponse> {
-        private HttpRequestBase httpRequest;
-        private HttpClientContext httpContext;
+    class HttpRequestTask implements Callable<Response> {
+        private okhttp3.Request httpRequest;
+        private Call call;
 
-        public HttpRequestTask(HttpRequestBase httpRequest, HttpClientContext httpContext) {
+        public HttpRequestTask(okhttp3.Request httpRequest) {
             this.httpRequest = httpRequest;
-            this.httpContext = httpContext;
+        }
+
+        public void cancel() {
+            call.cancel();
         }
 
         @Override
-        public CloseableHttpResponse call() throws Exception {
-            return httpClient.execute(httpRequest, httpContext);
+        public Response call() throws Exception {
+            call = httpClient.newCall(httpRequest);
+
+            return call.execute();
         }
-    };
+    }
 
 }

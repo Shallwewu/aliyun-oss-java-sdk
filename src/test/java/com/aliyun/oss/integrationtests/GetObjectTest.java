@@ -501,7 +501,7 @@ public class GetObjectTest extends TestBase {
         final long inputStreamLength = 128 * 1024; //128KB
         //TODO: With chinese characters will be failed. 
         final String metaKey0 = "tag";
-        final String metaValue0 = "元值0";
+        final String metaValue0 = "value0";
         
         try {
             ObjectMetadata metadata = new ObjectMetadata();

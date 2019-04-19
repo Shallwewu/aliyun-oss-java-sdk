@@ -1,136 +1,170 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
 package com.aliyun.oss.common.comm;
 
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.security.cert.CertificateException;
-import java.security.cert.X509Certificate;
-
-import javax.net.ssl.SSLContext;
-
-import org.apache.commons.codec.binary.Base64;
-import org.apache.http.Header;
-import org.apache.http.HttpHost;
-import org.apache.http.HttpStatus;
-import org.apache.http.auth.AUTH;
-import org.apache.http.auth.AuthScope;
-import org.apache.http.auth.NTCredentials;
-import org.apache.http.client.AuthCache;
-import org.apache.http.client.CredentialsProvider;
-import org.apache.http.client.config.RequestConfig;
-import org.apache.http.client.methods.CloseableHttpResponse;
-import org.apache.http.client.methods.HttpRequestBase;
-import org.apache.http.client.protocol.HttpClientContext;
-import org.apache.http.config.Registry;
-import org.apache.http.config.RegistryBuilder;
-import org.apache.http.config.SocketConfig;
-import org.apache.http.conn.HttpClientConnectionManager;
-import org.apache.http.conn.socket.ConnectionSocketFactory;
-import org.apache.http.conn.socket.PlainConnectionSocketFactory;
-import org.apache.http.conn.ssl.NoopHostnameVerifier;
-import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
-import org.apache.http.conn.ssl.TrustStrategy;
-import org.apache.http.impl.auth.BasicScheme;
-import org.apache.http.impl.client.BasicAuthCache;
-import org.apache.http.impl.client.BasicCredentialsProvider;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClients;
-import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
-import org.apache.http.ssl.SSLContextBuilder;
-
-import com.aliyun.oss.ClientConfiguration;
-import com.aliyun.oss.ClientErrorCode;
-import com.aliyun.oss.ClientException;
-import com.aliyun.oss.OSSErrorCode;
-import com.aliyun.oss.OSSException;
+import com.aliyun.oss.*;
+import com.aliyun.oss.common.comm.async.AsyncOperationManager;
+import com.aliyun.oss.common.comm.async.CallbackImpl;
+import com.aliyun.oss.model.OSSFuture;
 import com.aliyun.oss.common.utils.ExceptionFactory;
 import com.aliyun.oss.common.utils.HttpHeaders;
 import com.aliyun.oss.common.utils.HttpUtil;
 import com.aliyun.oss.common.utils.IOUtils;
+import okhttp3.*;
 
-/**
- * Default implementation of {@link ServiceClient}.
- */
+import javax.net.ssl.*;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.InetSocketAddress;
+import java.net.Proxy;
+import java.security.cert.CertificateException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+
+import static com.aliyun.oss.common.utils.LogUtils.logException;
+import static java.net.HttpURLConnection.HTTP_INTERNAL_ERROR;
+import static java.net.HttpURLConnection.HTTP_UNAVAILABLE;
+
 public class DefaultServiceClient extends ServiceClient {
+
     protected static HttpRequestFactory httpRequestFactory = new HttpRequestFactory();
 
-    protected CloseableHttpClient httpClient;
-    protected HttpClientConnectionManager connectionManager;
-    protected RequestConfig requestConfig;
-    protected CredentialsProvider credentialsProvider;
-    protected HttpHost proxyHttpHost;
-    protected AuthCache authCache;
+    protected OkHttpClient httpClient;
 
     public DefaultServiceClient(ClientConfiguration config) {
         super(config);
-        this.connectionManager = createHttpClientConnectionManager();
-        this.httpClient = createHttpClient(this.connectionManager);
-        RequestConfig.Builder requestConfigBuilder = RequestConfig.custom();
-        requestConfigBuilder.setConnectTimeout(config.getConnectionTimeout());
-        requestConfigBuilder.setSocketTimeout(config.getSocketTimeout());
-        requestConfigBuilder.setConnectionRequestTimeout(config.getConnectionRequestTimeout());
+        ConnectionPool connectionPool = new ConnectionPool(config.getMaxIdleConnections(), config.getIdleConnectionTime(), TimeUnit.MILLISECONDS);
+        OkHttpClient.Builder builder = new OkHttpClient.Builder().followRedirects(false).followSslRedirects(false)
+                .connectTimeout(config.getConnectionTimeout(), TimeUnit.MILLISECONDS).readTimeout(config.getReadTimeout(), TimeUnit.MILLISECONDS)
+                .writeTimeout(config.getWriteTimeout(), TimeUnit.MILLISECONDS).retryOnConnectionFailure(true).connectionPool(connectionPool);
 
-        String proxyHost = config.getProxyHost();
-        int proxyPort = config.getProxyPort();
-        if (proxyHost != null && proxyPort > 0) {
-            this.proxyHttpHost = new HttpHost(proxyHost, proxyPort);
-            requestConfigBuilder.setProxy(proxyHttpHost);
-
-            String proxyUsername = config.getProxyUsername();
-            String proxyPassword = config.getProxyPassword();
-            String proxyDomain = config.getProxyDomain();
-            String proxyWorkstation = config.getProxyWorkstation();
-            if (proxyUsername != null && proxyPassword != null) {
-                this.credentialsProvider = new BasicCredentialsProvider();
-                this.credentialsProvider.setCredentials(new AuthScope(proxyHost, proxyPort),
-                        new NTCredentials(proxyUsername, proxyPassword, proxyWorkstation, proxyDomain));
-
-                this.authCache = new BasicAuthCache();
-                authCache.put(this.proxyHttpHost, new BasicScheme());
+        builder.hostnameVerifier(new HostnameVerifier() {
+            @Override
+            public boolean verify(String hostname, SSLSession session) {
+                return true;
             }
+        });
+
+        final TrustManager[] trustAllCerts = new TrustManager[]{
+                new X509TrustManager() {
+                    @Override
+                    public void checkClientTrusted(java.security.cert.X509Certificate[] chain, String authType) throws CertificateException {
+                    }
+
+                    @Override
+                    public void checkServerTrusted(java.security.cert.X509Certificate[] chain, String authType) throws CertificateException {
+                    }
+
+                    @Override
+                    public java.security.cert.X509Certificate[] getAcceptedIssuers() {
+                        return new java.security.cert.X509Certificate[]{};
+                    }
+                }
+        };
+
+        SSLSocketFactory sslSocketFactory = null;
+
+        try {
+            SSLContext sslContext = SSLContext.getInstance("TLS");
+            sslContext.init(null, trustAllCerts, new java.security.SecureRandom());
+            sslSocketFactory = sslContext.getSocketFactory();
+        } catch (Exception e) {
+            e.printStackTrace();
         }
 
-        this.requestConfig = requestConfigBuilder.build();
+        builder.sslSocketFactory(sslSocketFactory, (X509TrustManager) trustAllCerts[0]);
+        String proxyHost = config.getProxyHost();
+        int proxyPort = config.getProxyPort();
+
+        if (proxyHost != null && proxyPort > 0) {
+            Proxy proxy = new Proxy(Proxy.Type.HTTP, new InetSocketAddress(proxyHost, proxyPort));
+            final String proxyUsername = config.getProxyUsername();
+            final String proxyPassword = config.getProxyPassword();
+            Authenticator authenticator = new Authenticator() {
+                @Override
+                public okhttp3.Request authenticate(Route route, Response response) throws IOException {
+                    if (responseCount(response) >= 3) {
+                        return null; // If we've failed 3 times, give up.
+                    }
+                    String credential = Credentials.basic(proxyUsername, proxyPassword);
+
+                    return response.request().newBuilder().header("Proxy-Authorization", credential).build();
+                }
+
+                private int responseCount(Response response) {
+                    int result = 1;
+                    while ((response = response.priorResponse()) != null) {
+                        result++;
+                    }
+                    return result;
+                }
+            };
+            builder.proxy(proxy);
+            builder.proxyAuthenticator(authenticator);
+        }
+        httpClient = builder.build();
+        httpClient.dispatcher().setMaxRequests(config.getMaxConcurrentRequest());
+        httpClient.dispatcher().setMaxRequestsPerHost(config.getMaxConcurrentRequest());
     }
 
     @Override
-    public ResponseMessage sendRequestCore(ServiceClient.Request request, ExecutionContext context) throws IOException {
-        HttpRequestBase httpRequest = httpRequestFactory.createHttpRequest(request, context);
-        setProxyAuthorizationIfNeed(httpRequest);
-        HttpClientContext httpContext = createHttpContext();
-        httpContext.setRequestConfig(this.requestConfig);
+    protected ResponseMessage sendRequestCore(Request request, ExecutionContext context) throws IOException {
+        okhttp3.Request httpRequest = httpRequestFactory.createHttpRequest(request, context);
+        boolean connectionTimeChanged = request.getConnectionTimeout() > 0 && request.getConnectionTimeout() != config.getConnectionTimeout();
+        boolean readTimeChanged = request.getReadTimeout() > 0 && request.getReadTimeout() != config.getReadTimeout();
+        boolean writeTimeChanged = request.getWriteTimeout() > 0 && request.getWriteTimeout() != config.getWriteTimeout();
 
-        CloseableHttpResponse httpResponse = null;
+        OkHttpClient client;
+        if (connectionTimeChanged || readTimeChanged || writeTimeChanged) {
+            client = httpClient.newBuilder().connectTimeout(connectionTimeChanged ? request.getConnectionTimeout() : config.getConnectionTimeout(), TimeUnit.MILLISECONDS)
+                    .readTimeout(readTimeChanged ? request.getReadTimeout() : config.getReadTimeout(), TimeUnit.MILLISECONDS)
+                    .writeTimeout(writeTimeChanged ? request.getWriteTimeout() : config.getWriteTimeout(), TimeUnit.MILLISECONDS)
+                    .build();
+        } else {
+            client = httpClient;
+        }
+        Response response;
+
+        Call call = client.newCall(httpRequest);
         try {
-            httpResponse = httpClient.execute(httpRequest, httpContext);
+            response = call.execute();
         } catch (IOException ex) {
-            httpRequest.abort();
+            call.cancel();
             throw ExceptionFactory.createNetworkException(ex);
         }
 
-        return buildResponse(request, httpResponse);
+        return buildResponse(request, response);
     }
 
-    protected static ResponseMessage buildResponse(ServiceClient.Request request, CloseableHttpResponse httpResponse)
+    @Override
+    protected <T, RESULT> OSSFuture<RESULT> asyncSendRequestCore(Request request, ExecutionContext context, CallbackImpl<T, RESULT> callback) {
+        okhttp3.Request httpRequest = httpRequestFactory.createHttpRequest(request, context);
+        boolean connectionTimeChanged = request.getConnectionTimeout() > 0 && request.getConnectionTimeout() != config.getConnectionRequestTimeout();
+        boolean readTimeChanged = request.getReadTimeout() > 0 && request.getReadTimeout() != config.getReadTimeout();
+        boolean writeTimeChanged = request.getWriteTimeout() > 0 && request.getWriteTimeout() != config.getWriteTimeout();
+
+        OkHttpClient client;
+        if (connectionTimeChanged || readTimeChanged || writeTimeChanged) {
+            client = httpClient.newBuilder().connectTimeout(connectionTimeChanged ? request.getConnectionTimeout() : config.getConnectionTimeout(), TimeUnit.MILLISECONDS)
+                    .readTimeout(readTimeChanged ? request.getReadTimeout() : config.getReadTimeout(), TimeUnit.MILLISECONDS)
+                    .writeTimeout(writeTimeChanged ? request.getWriteTimeout() : config.getWriteTimeout(), TimeUnit.MILLISECONDS)
+                    .build();
+        } else {
+            client = httpClient;
+        }
+        OSSFuture futureTask = new OSSFuture();
+        callback.setRequest(request);
+        callback.setContext(context);
+        AsyncOperationManager.put(futureTask, callback);
+
+        Call call = client.newCall(httpRequest);
+
+        call.enqueue(callback);
+
+        return futureTask;
+    }
+
+    public static ResponseMessage buildResponse(ServiceClient.Request request, Response httpResponse)
             throws IOException {
 
         assert (httpResponse != null);
@@ -139,23 +173,21 @@ public class DefaultServiceClient extends ServiceClient {
         response.setUrl(request.getUri());
         response.setHttpResponse(httpResponse);
 
-        if (httpResponse.getStatusLine() != null) {
-            response.setStatusCode(httpResponse.getStatusLine().getStatusCode());
+        response.setStatusCode(httpResponse.code());
+
+        if (response.isSuccessful()) {
+            response.setContent(httpResponse.body().byteStream());
+        } else {
+            readAndSetErrorResponse(httpResponse.body().byteStream(), response);
         }
 
-        if (httpResponse.getEntity() != null) {
-            if (response.isSuccessful()) {
-                response.setContent(httpResponse.getEntity().getContent());
-            } else {
-                readAndSetErrorResponse(httpResponse.getEntity().getContent(), response);
+        for (int index = 0; index < httpResponse.headers().size(); index++) {
+            String name = httpResponse.headers().name(index);
+            String value = httpResponse.headers().value(index);
+            if (HttpHeaders.CONTENT_LENGTH.equals(name)) {
+                response.setContentLength(Long.parseLong(value));
             }
-        }
-
-        for (Header header : httpResponse.getAllHeaders()) {
-            if (HttpHeaders.CONTENT_LENGTH.equals(header.getName())) {
-                response.setContentLength(Long.parseLong(header.getValue()));
-            }
-            response.addHeader(header.getName(), header.getValue());
+            response.addHeader(name, value);
         }
 
         HttpUtil.convertHeaderCharsetFromIso88591(response.getHeaders());
@@ -200,8 +232,8 @@ public class DefaultServiceClient extends ServiceClient {
 
             if (response != null) {
                 int statusCode = response.getStatusCode();
-                if (statusCode == HttpStatus.SC_INTERNAL_SERVER_ERROR
-                        || statusCode == HttpStatus.SC_SERVICE_UNAVAILABLE) {
+                if (statusCode == HTTP_INTERNAL_ERROR
+                        || statusCode == HTTP_UNAVAILABLE) {
                     return true;
                 }
             }
@@ -215,69 +247,20 @@ public class DefaultServiceClient extends ServiceClient {
         return new DefaultRetryStrategy();
     }
 
-    protected CloseableHttpClient createHttpClient(HttpClientConnectionManager connectionManager) {
-        return HttpClients.custom().setConnectionManager(connectionManager).setUserAgent(this.config.getUserAgent())
-                .disableContentCompression().disableAutomaticRetries().build();
-    }
-
-    protected HttpClientConnectionManager createHttpClientConnectionManager() {
-        SSLContext sslContext = null;
-        try {
-            sslContext = new SSLContextBuilder().loadTrustMaterial(null, new TrustStrategy() {
-
-                @Override
-                public boolean isTrusted(X509Certificate[] chain, String authType) throws CertificateException {
-                    return true;
-                }
-
-            }).build();
-
-        } catch (Exception e) {
-            throw new ClientException(e.getMessage());
-        }
-
-        SSLConnectionSocketFactory sslSocketFactory = new SSLConnectionSocketFactory(sslContext,
-                NoopHostnameVerifier.INSTANCE);
-        Registry<ConnectionSocketFactory> socketFactoryRegistry = RegistryBuilder.<ConnectionSocketFactory> create()
-                .register(Protocol.HTTP.toString(), PlainConnectionSocketFactory.getSocketFactory())
-                .register(Protocol.HTTPS.toString(), sslSocketFactory).build();
-
-        PoolingHttpClientConnectionManager connectionManager = new PoolingHttpClientConnectionManager(
-                socketFactoryRegistry);
-        connectionManager.setDefaultMaxPerRoute(config.getMaxConnections());
-        connectionManager.setMaxTotal(config.getMaxConnections());
-        connectionManager.setValidateAfterInactivity(config.getValidateAfterInactivity());
-        connectionManager.setDefaultSocketConfig(
-                SocketConfig.custom().setSoTimeout(config.getSocketTimeout()).setTcpNoDelay(true).build());
-        if (config.isUseReaper()) {
-            IdleConnectionReaper.setIdleConnectionTime(config.getIdleConnectionTime());
-            IdleConnectionReaper.registerConnectionManager(connectionManager);
-        }
-        return connectionManager;
-    }
-
-    protected HttpClientContext createHttpContext() {
-        HttpClientContext httpContext = HttpClientContext.create();
-        httpContext.setRequestConfig(this.requestConfig);
-        if (this.credentialsProvider != null) {
-            httpContext.setCredentialsProvider(this.credentialsProvider);
-            httpContext.setAuthCache(this.authCache);
-        }
-        return httpContext;
-    }
-
-    private void setProxyAuthorizationIfNeed(HttpRequestBase httpRequest) {
-        if (this.credentialsProvider != null) {
-            String auth = this.config.getProxyUsername() + ":" + this.config.getProxyPassword();
-            byte[] encodedAuth = Base64.encodeBase64(auth.getBytes());
-            String authHeader = "Basic " + new String(encodedAuth);
-            httpRequest.addHeader(AUTH.PROXY_AUTH_RESP, authHeader);
-        }
-    }
-
     @Override
     public void shutdown() {
-        IdleConnectionReaper.removeConnectionManager(this.connectionManager);
-        this.connectionManager.shutdown();
+        try {
+            if (httpClient.dispatcher().executorService() != null) {
+                httpClient.dispatcher().executorService().shutdown();
+            }
+            if (httpClient.connectionPool() != null) {
+                httpClient.connectionPool().evictAll();
+            }
+            if (httpClient.cache() != null) {
+                httpClient.cache().close();
+            }
+        } catch (IOException e) {
+            logException("shutdown throw exception: ", e);
+        }
     }
 }

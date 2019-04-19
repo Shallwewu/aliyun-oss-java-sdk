@@ -21,6 +21,8 @@ package com.aliyun.oss.common.utils;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
 import java.nio.charset.Charset;
 import java.text.Collator;
 import java.util.Collection;
@@ -118,6 +120,14 @@ public class StringUtils {
      */
     public static String fromByte(Byte b) {
         return Byte.toString(b);
+    }
+
+    public static String fromBytes(byte[] bytes, Charset charset) throws CharacterCodingException {
+        try {
+            return charset.newDecoder().decode(ByteBuffer.wrap(bytes)).toString();
+        } catch (CharacterCodingException var3) {
+            throw new CharacterCodingException();
+        }
     }
 
     public static String replace( String originalString, String partToMatch, String replacement ) {

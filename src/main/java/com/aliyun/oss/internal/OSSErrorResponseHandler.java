@@ -20,7 +20,9 @@
 package com.aliyun.oss.internal;
 
 import static com.aliyun.oss.internal.OSSUtils.safeCloseResponse;
-import org.apache.http.HttpStatus;
+import static java.net.HttpURLConnection.HTTP_NOT_FOUND;
+import static java.net.HttpURLConnection.HTTP_NOT_MODIFIED;
+import static java.net.HttpURLConnection.HTTP_PRECON_FAILED;
 
 import com.aliyun.oss.ClientException;
 import com.aliyun.oss.OSSErrorCode;
@@ -47,16 +49,16 @@ public class OSSErrorResponseHandler implements ResponseHandler {
 
         String requestId = response.getRequestId();
         int statusCode = response.getStatusCode();
-        if (response.getContent() == null) {
+        if (response.getHttpResponse().body().contentLength() == 0) {
             /**
              * When HTTP response body is null, handle status code 404 Not
              * Found, 304 Not Modified, 412 Precondition Failed especially.
              */
-            if (statusCode == HttpStatus.SC_NOT_FOUND) {
+            if (statusCode == HTTP_NOT_FOUND) {
                 throw ExceptionFactory.createOSSException(requestId, OSSErrorCode.NO_SUCH_KEY, "Not Found");
-            } else if (statusCode == HttpStatus.SC_NOT_MODIFIED) {
+            } else if (statusCode == HTTP_NOT_MODIFIED) {
                 throw ExceptionFactory.createOSSException(requestId, OSSErrorCode.NOT_MODIFIED, "Not Modified");
-            } else if (statusCode == HttpStatus.SC_PRECONDITION_FAILED) {
+            } else if (statusCode == HTTP_PRECON_FAILED) {
                 throw ExceptionFactory.createOSSException(requestId, OSSErrorCode.PRECONDITION_FAILED,
                         "Precondition Failed");
             } else {

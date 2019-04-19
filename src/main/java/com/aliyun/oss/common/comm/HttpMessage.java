@@ -27,7 +27,7 @@ import java.util.Map;
 /**
  * Common class for both HTTP request and HTTP response.
  */
-public abstract class HttpMesssage {
+public abstract class HttpMessage {
 
     private Map<String, String> headers = new HashMap<String, String>();
     private InputStream content;

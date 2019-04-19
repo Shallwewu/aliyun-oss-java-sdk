@@ -21,71 +21,84 @@ package com.aliyun.oss.common.comm;
 
 import java.util.Map.Entry;
 
-import org.apache.http.HttpEntity;
-import org.apache.http.client.methods.HttpDelete;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.client.methods.HttpHead;
-import org.apache.http.client.methods.HttpOptions;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.client.methods.HttpPut;
-import org.apache.http.client.methods.HttpRequestBase;
+import okhttp3.MediaType;
+import okhttp3.Request;
 
 import com.aliyun.oss.ClientException;
 import com.aliyun.oss.HttpMethod;
-import com.aliyun.oss.common.comm.io.ChunkedInputStreamEntity;
 import com.aliyun.oss.common.utils.HttpHeaders;
+import okhttp3.RequestBody;
+import okio.BufferedSink;
 
 class HttpRequestFactory {
 
-    public HttpRequestBase createHttpRequest(ServiceClient.Request request, ExecutionContext context) {
+    public Request createHttpRequest(ServiceClient.Request request, ExecutionContext context) {
+        Request.Builder builder = createHttpRequestBuilder(request, context);
 
+        return builder.build();
+    }
+
+    private Request.Builder createHttpRequestBuilder(ServiceClient.Request request, ExecutionContext context) {
+        Request.Builder builder = new Request.Builder();
         String uri = request.getUri();
 
-        HttpRequestBase httpRequest;
         HttpMethod method = request.getMethod();
         if (method == HttpMethod.POST) {
-            HttpPost postMethod = new HttpPost(uri);
+            RepeatableInputStreamEntity requestBody = null;
 
             if (request.getContent() != null) {
-                postMethod.setEntity(new RepeatableInputStreamEntity(request));
+                if (request.getContent().markSupported()) {
+                    requestBody = new RepeatableInputStreamEntity(request);
+                } else {
+                    requestBody = new UnRepeatableInputStreamEntity(request);
+                }
             }
-
-            httpRequest = postMethod;
+            builder.post(requestBody);
         } else if (method == HttpMethod.PUT) {
-            HttpPut putMethod = new HttpPut(uri);
+            RequestBody requestBody;
 
             if (request.getContent() != null) {
                 if (request.isUseChunkEncoding()) {
-                    putMethod.setEntity(buildChunkedInputStreamEntity(request));
-                } else {
-                    putMethod.setEntity(new RepeatableInputStreamEntity(request));
+                    builder.header(HttpHeaders.TRANSFER_ENCODING, "chunked");
                 }
-            }
+                if (request.getContent().markSupported()) {
+                    requestBody = new RepeatableInputStreamEntity(request);
+                } else {
+                    requestBody = new UnRepeatableInputStreamEntity(request);
+                }
+            } else {
+                requestBody = new RequestBody() {
+                    @Override
+                    public MediaType contentType() {
+                        return null;
+                    }
 
-            httpRequest = putMethod;
+                    @Override
+                    public void writeTo(BufferedSink sink) {
+                    }
+                };
+            }
+            builder.put(requestBody);
         } else if (method == HttpMethod.GET) {
-            httpRequest = new HttpGet(uri);
+            builder.get();
         } else if (method == HttpMethod.DELETE) {
-            httpRequest = new HttpDelete(uri);
+            builder.delete();
         } else if (method == HttpMethod.HEAD) {
-            httpRequest = new HttpHead(uri);
+            builder.head();
         } else if (method == HttpMethod.OPTIONS) {
-            httpRequest = new HttpOptions(uri);
+            builder.method("OPTIONS", null);
         } else {
             throw new ClientException("Unknown HTTP method name: " + method.toString());
         }
 
-        configureRequestHeaders(request, context, httpRequest);
+        builder.url(uri);
+        configureRequestHeaders(request, context, builder);
 
-        return httpRequest;
-    }
-
-    private HttpEntity buildChunkedInputStreamEntity(ServiceClient.Request request) {
-        return new ChunkedInputStreamEntity(request);
+        return builder;
     }
 
     private void configureRequestHeaders(ServiceClient.Request request, ExecutionContext context,
-            HttpRequestBase httpRequest) {
+                                         Request.Builder builder) {
 
         for (Entry<String, String> entry : request.getHeaders().entrySet()) {
             if (entry.getKey().equalsIgnoreCase(HttpHeaders.CONTENT_LENGTH)
@@ -93,7 +106,8 @@ class HttpRequestFactory {
                 continue;
             }
 
-            httpRequest.addHeader(entry.getKey(), entry.getValue());
+            builder.addHeader(entry.getKey(), entry.getValue());
         }
     }
+
 }

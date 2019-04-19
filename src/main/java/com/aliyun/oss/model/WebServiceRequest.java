@@ -42,6 +42,10 @@ public abstract class WebServiceRequest {
 
     private Set<String> additionalHeaderNames = new HashSet<String>();
 
+    private int connectionTimeout;
+    private int readTimeout;
+    private int writeTimeout;
+
     public void setProgressListener(ProgressListener progressListener) {
         this.progressListener = (progressListener == null) ? ProgressListener.NOOP : progressListener;
     }
@@ -56,7 +60,6 @@ public abstract class WebServiceRequest {
         T t = (T) this;
         return t;
     }
-
     public Map<String, String> getParameters() {
         return parameters;
     }
@@ -99,5 +102,29 @@ public abstract class WebServiceRequest {
 
     public void setLogEnabled(boolean logEnabled) {
         this.logEnabled = logEnabled;
+    }
+
+    public int getConnectionTimeout() {
+        return connectionTimeout;
+    }
+
+    public void setConnectionTimeout(int connectionTimeout) {
+        this.connectionTimeout = connectionTimeout;
+    }
+
+    public int getReadTimeout() {
+        return readTimeout;
+    }
+
+    public void setReadTimeout(int readTimeout) {
+        this.readTimeout = readTimeout;
+    }
+
+    public int getWriteTimeout() {
+        return writeTimeout;
+    }
+
+    public void setWriteTimeout(int writeTimeout) {
+        this.writeTimeout = writeTimeout;
     }
 }

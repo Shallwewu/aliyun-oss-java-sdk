@@ -22,15 +22,10 @@ package com.aliyun.oss.common.utils;
 import static com.aliyun.oss.internal.OSSUtils.COMMON_RESOURCE_MANAGER;
 
 import java.io.IOException;
+import java.net.ProtocolException;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
-
-import org.apache.http.NoHttpResponseException;
-import org.apache.http.client.ClientProtocolException;
-import org.apache.http.client.NonRepeatableRequestException;
-import org.apache.http.conn.ConnectTimeoutException;
-import org.apache.http.conn.HttpHostConnectException;
 
 import com.aliyun.oss.ClientErrorCode;
 import com.aliyun.oss.ClientException;
@@ -52,20 +47,10 @@ public class ExceptionFactory {
             errorCode = ClientErrorCode.SOCKET_TIMEOUT;
         } else if (ex instanceof SocketException) {
             errorCode = ClientErrorCode.SOCKET_EXCEPTION;
-        } else if (ex instanceof ConnectTimeoutException) {
-            errorCode = ClientErrorCode.CONNECTION_TIMEOUT;
         } else if (ex instanceof UnknownHostException) {
             errorCode = ClientErrorCode.UNKNOWN_HOST;
-        } else if (ex instanceof HttpHostConnectException) {
-            errorCode = ClientErrorCode.CONNECTION_REFUSED;
-        } else if (ex instanceof NoHttpResponseException) {
-            errorCode = ClientErrorCode.CONNECTION_TIMEOUT;
-        } else if (ex instanceof ClientProtocolException) {
-            Throwable cause = ex.getCause();
-            if (cause instanceof NonRepeatableRequestException) {
-                errorCode = ClientErrorCode.NONREPEATABLE_REQUEST;
-                return new ClientException(cause.getMessage(), errorCode, requestId, cause);
-            }
+        } else if (ex instanceof ProtocolException) {
+            errorCode = ClientErrorCode.NONREPEATABLE_REQUEST;
         }
 
         return new ClientException(ex.getMessage(), errorCode, requestId, ex);

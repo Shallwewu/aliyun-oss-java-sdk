@@ -30,13 +30,13 @@ import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
 import java.util.List;
 
-import org.apache.http.HttpMessage;
-
 import com.aliyun.oss.ClientConfiguration;
 import com.aliyun.oss.ClientException;
 import com.aliyun.oss.HttpMethod;
 import com.aliyun.oss.ServiceException;
 import com.aliyun.oss.common.auth.RequestSigner;
+import com.aliyun.oss.common.comm.async.CallbackImpl;
+import com.aliyun.oss.model.OSSFuture;
 import com.aliyun.oss.common.utils.HttpUtil;
 import com.aliyun.oss.common.utils.LogUtils;
 import com.aliyun.oss.internal.OSSConstants;
@@ -77,6 +77,14 @@ public abstract class ServiceClient {
                 throw new ClientException("Unexpected io exception when trying to close http request: ", ex);
             }
         }
+    }
+
+    public <T, RESULT> OSSFuture<RESULT> asyncSendRequest(RequestMessage request, ExecutionContext context, CallbackImpl<T, RESULT> callback)
+            throws ClientException {
+        assertParameterNotNull(request, "request");
+        assertParameterNotNull(context, "context");
+
+        return asyncSendRequestImpl(request, context, callback);
     }
 
     private ResponseMessage sendRequestImpl(RequestMessage request, ExecutionContext context)
@@ -175,10 +183,47 @@ public abstract class ServiceClient {
         }
     }
 
+    private <T, RESULT> OSSFuture<RESULT> asyncSendRequestImpl(RequestMessage request, ExecutionContext context, CallbackImpl<T, RESULT> callback)
+            throws ClientException {
+        RetryStrategy retryStrategy = context.getRetryStrategy() != null ? context.getRetryStrategy()
+                : this.getDefaultRetryStrategy();
+
+        // Sign the request if a signer provided.
+        if (context.getSigner() != null && !request.isUseUrlSignature()) {
+            context.getSigner().sign(request);
+        }
+
+        for (RequestSigner signer : context.getSignerHandlers()) {
+            signer.sign(request);
+        }
+
+        InputStream requestContent = request.getContent();
+        if (requestContent != null && requestContent.markSupported()) {
+            requestContent.mark(OSSConstants.DEFAULT_STREAM_BUFFER_SIZE);
+        }
+
+        /*
+         * The key four steps to send HTTP requests and receive HTTP
+         * responses.
+         */
+
+        // Step 1. Preprocess HTTP request.
+        handleRequest(request, context.getResquestHandlers());
+
+        // Step 2. Build HTTP request with specified request parameters
+        // and context.
+        Request httpRequest = buildRequest(request, context);
+
+        // Step 3. Send HTTP request to OSS.
+        return asyncSendRequestCore(httpRequest, context, callback);
+    }
+
     /**
      * Implements the core logic to send requests to Aliyun OSS services.
      */
     protected abstract ResponseMessage sendRequestCore(Request request, ExecutionContext context) throws IOException;
+
+    protected abstract <T, RESULT> OSSFuture<RESULT> asyncSendRequestCore(Request request, ExecutionContext context, CallbackImpl<T, RESULT> callback);
 
     private Request buildRequest(RequestMessage requestMessage, ExecutionContext context) throws ClientException {
 
@@ -247,6 +292,10 @@ public abstract class ServiceClient {
             request.setContent(requestMessage.getContent());
             request.setContentLength(requestMessage.getContentLength());
         }
+
+        request.setConnectionTimeout(requestMessage.getOriginalRequest().getConnectionTimeout());
+        request.setReadTimeout(requestMessage.getOriginalRequest().getReadTimeout());
+        request.setWriteTimeout(requestMessage.getOriginalRequest().getWriteTimeout());
 
         return request;
     }
@@ -322,11 +371,14 @@ public abstract class ServiceClient {
      * Wrapper class based on {@link HttpMessage} that represents HTTP request
      * message to OSS.
      */
-    public static class Request extends HttpMesssage {
+    public static class Request extends HttpMessage {
         private String uri;
         private HttpMethod method;
         private boolean useUrlSignature = false;
         private boolean useChunkEncoding = false;
+        private int connectionTimeout;
+        private int readTimeout;
+        private int writeTimeout;
 
         public String getUri() {
             return this.uri;
@@ -358,6 +410,30 @@ public abstract class ServiceClient {
 
         public void setUseChunkEncoding(boolean useChunkEncoding) {
             this.useChunkEncoding = useChunkEncoding;
+        }
+
+        public int getConnectionTimeout() {
+            return connectionTimeout;
+        }
+
+        public void setConnectionTimeout(int connectionTimeout) {
+            this.connectionTimeout = connectionTimeout;
+        }
+
+        public int getReadTimeout() {
+            return readTimeout;
+        }
+
+        public void setReadTimeout(int readTimeout) {
+            this.readTimeout = readTimeout;
+        }
+
+        public int getWriteTimeout() {
+            return writeTimeout;
+        }
+
+        public void setWriteTimeout(int writeTimeout) {
+            this.writeTimeout = writeTimeout;
         }
     }
 }

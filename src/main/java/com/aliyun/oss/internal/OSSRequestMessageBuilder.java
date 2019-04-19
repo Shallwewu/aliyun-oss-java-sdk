@@ -38,6 +38,7 @@ import com.aliyun.oss.common.comm.RequestMessage;
 import com.aliyun.oss.common.comm.ServiceClient;
 import com.aliyun.oss.common.comm.io.FixedLengthInputStream;
 import com.aliyun.oss.common.utils.DateUtil;
+import com.aliyun.oss.common.utils.HttpHeaders;
 import com.aliyun.oss.model.WebServiceRequest;
 
 /*
@@ -168,7 +169,14 @@ public class OSSRequestMessageBuilder {
 
     public RequestMessage build() {
         Map<String, String> sentHeaders = new HashMap<String, String>(this.headers);
-        sentHeaders.put(OSSHeaders.DATE, DateUtil.formatRfc822Date(new Date()));
+        sentHeaders.put(HttpHeaders.DATE, DateUtil.formatRfc822Date(new Date()));
+        sentHeaders.put(HttpHeaders.USER_AGENT, innerClient.getClientConfiguration().getUserAgent());
+
+        //avoid default gzip accept encoding added by okhttp
+        if (!sentHeaders.containsKey(HttpHeaders.ACCEPT_ENCODING)) {
+            sentHeaders.put(HttpHeaders.ACCEPT_ENCODING, "*");
+        }
+
         Map<String, String> sentParameters = new LinkedHashMap<String, String>(this.parameters);
 
         RequestMessage request = new RequestMessage(this.originalRequest, this.bucket, this.key);

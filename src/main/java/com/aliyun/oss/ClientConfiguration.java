@@ -29,7 +29,6 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 import com.aliyun.oss.common.auth.RequestSigner;
-import com.aliyun.oss.common.comm.IdleConnectionReaper;
 import com.aliyun.oss.common.comm.Protocol;
 import com.aliyun.oss.common.comm.SignVersion;
 import com.aliyun.oss.common.utils.ResourceManager;
@@ -56,6 +55,11 @@ public class ClientConfiguration {
     public static final int DEFAULT_REQUEST_TIMEOUT = 5 * 60 * 1000;
     public static final long DEFAULT_SLOW_REQUESTS_THRESHOLD = 5 * 60 * 1000;
 
+    public static final int DEFAULT_READ_TIMEOUT = 50 * 1000;
+    public static final int DEFAULT_WRITE_TIMEOUT = 50 * 1000;
+    public static final int DEFAULT_MAX_CONCURRENT_REQUEST = 64;
+    public static final int DEFAULT_MAX_IDLE_CONNECTIONS = 10;
+
     public static final boolean DEFAULT_USE_REAPER = true;
 
     public static final String DEFAULT_CNAME_EXCLUDE_LIST = "aliyuncs.com,aliyun-inc.com,aliyun.com";
@@ -67,10 +71,14 @@ public class ClientConfiguration {
     protected int connectionRequestTimeout = DEFAULT_CONNECTION_REQUEST_TIMEOUT;
     protected int connectionTimeout = DEFAULT_CONNECTION_TIMEOUT;
     protected int socketTimeout = DEFAULT_SOCKET_TIMEOUT;
+    protected int readTimeout = DEFAULT_READ_TIMEOUT;
+    protected int writeTimeout = DEFAULT_WRITE_TIMEOUT;
     protected int maxConnections = DEFAULT_MAX_CONNECTIONS;
     protected long connectionTTL = DEFAULT_CONNECTION_TTL;
     protected boolean useReaper = DEFAULT_USE_REAPER;
     protected long idleConnectionTime = DEFAULT_IDLE_CONNECTION_TIME;
+    protected int maxIdleConnections = DEFAULT_MAX_IDLE_CONNECTIONS;
+    protected int maxConcurrentRequest = DEFAULT_MAX_CONCURRENT_REQUEST;
 
     protected Protocol protocol = Protocol.HTTP;
 
@@ -246,6 +254,7 @@ public class ClientConfiguration {
      *
      * @return The max connection count. By default it's 1024.
      */
+    @Deprecated
     public int getMaxConnections() {
         return maxConnections;
     }
@@ -256,6 +265,7 @@ public class ClientConfiguration {
      * @param maxConnections
      *            The max connection count.
      */
+    @Deprecated
     public void setMaxConnections(int maxConnections) {
         this.maxConnections = maxConnections;
     }
@@ -266,6 +276,34 @@ public class ClientConfiguration {
      *
      * @return The socket timeout in millisecond.
      */
+
+    /**
+     * Gets the max concurrent request.
+     *
+     * @return The max concurrent request. By default it's 64. For async request, Connection pool will create 64 thread for concurrent tasks at most.
+     */
+    public int getMaxConcurrentRequest() {
+        return maxConcurrentRequest;
+    }
+
+    /**
+     * Sets the max concurrent request.
+     *
+     * @param maxConcurrentRequest
+     *            The max concurrent request.
+     */
+    public void setMaxConcurrentRequest(int maxConcurrentRequest) {
+        this.maxConcurrentRequest = maxConcurrentRequest;
+    }
+
+    /**
+     * Gets the socket timeout in millisecond. 0 means infinite timeout, not
+     * recommended.
+     *
+     * @return The socket timeout in millisecond.
+     */
+
+    @Deprecated
     public int getSocketTimeout() {
         return socketTimeout;
     }
@@ -277,8 +315,51 @@ public class ClientConfiguration {
      * @param socketTimeout
      *            The socket timeout in millisecond.
      */
+    @Deprecated
     public void setSocketTimeout(int socketTimeout) {
         this.socketTimeout = socketTimeout;
+    }
+
+    /**
+     * Sets the read timeout in millisecond. 0 means infinite timeout, not
+     * recommended.
+     *
+     * @param readTimeout
+     *            The socket timeout in millisecond.
+     */
+    public void setReadTimeout(int readTimeout) {
+        this.readTimeout = readTimeout;
+    }
+
+    /**
+     * Gets the read timeout in millisecond. 0 means infinite timeout, not
+     * recommended.
+     *
+     * @return The read timeout in millisecond.
+     */
+    public int getReadTimeout() {
+        return readTimeout;
+    }
+
+    /**
+     * Sets the write timeout in millisecond. 0 means infinite timeout, not
+     * recommended.
+     *
+     * @param writeTimeout
+     *            The socket timeout in millisecond.
+     */
+    public void setWriteTimeout(int writeTimeout) {
+        this.writeTimeout = writeTimeout;
+    }
+
+    /**
+     * Gets the write timeout in millisecond. 0 means infinite timeout, not
+     * recommended.
+     *
+     * @return The write timeout in millisecond.
+     */
+    public int getWriteTimeout() {
+        return writeTimeout;
     }
 
     /**
@@ -362,18 +443,12 @@ public class ClientConfiguration {
         this.connectionTTL = connectionTTL;
     }
 
-    /**
-     * Gets the flag of using {@link IdleConnectionReaper} to manage expired
-     * connection.
-     */
+    @Deprecated
     public boolean isUseReaper() {
         return useReaper;
     }
 
-    /**
-     * Sets the flag of using {@link IdleConnectionReaper} to manage expired
-     * connection.
-     */
+    @Deprecated
     public void setUseReaper(boolean useReaper) {
         this.useReaper = useReaper;
     }
@@ -397,6 +472,20 @@ public class ClientConfiguration {
      */
     public void setIdleConnectionTime(long idleConnectionTime) {
         this.idleConnectionTime = idleConnectionTime;
+    }
+
+    /**
+     * Gets max idle connections.
+     */
+    public int getMaxIdleConnections() {
+        return maxIdleConnections;
+    }
+
+    /**
+     * Sets max idle connections.
+     */
+    public void setMaxIdleConnections(int maxIdleConnections) {
+        this.maxIdleConnections = maxIdleConnections;
     }
 
     /**
